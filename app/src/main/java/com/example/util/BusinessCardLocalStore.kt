@@ -127,8 +127,7 @@ object BusinessCardLocalStore {
         val now = System.currentTimeMillis()
         val saved = SavedBusinessCard(
             id = "card_${UUID.randomUUID().toString().take(8)}_$now",
-            createdAtMillis = now,
-            updatedAtMillis = now,
+            savedAtMs = now,
             draft = draft
         )
         existing.add(0, saved)
@@ -144,28 +143,28 @@ object BusinessCardLocalStore {
         return (0 until arr.length()).mapNotNull { idx ->
             val o = arr.optJSONObject(idx) ?: return@mapNotNull null
             val d = o.optJSONObject("draft") ?: return@mapNotNull null
+            val savedMs = o.optLong("savedAtMs", o.optLong("updatedAtMillis", 0L))
             SavedBusinessCard(
                 id = o.optString("id", ""),
-                createdAtMillis = o.optLong("createdAtMillis", 0L),
-                updatedAtMillis = o.optLong("updatedAtMillis", 0L),
+                savedAtMs = savedMs,
                 draft = BusinessCardDraft(
                     paletteId = d.optString("paletteId", "forest_cream"),
                     isLightCard = d.optBoolean("isLightCard", false),
                     layout = BusinessCardLayout.entries.firstOrNull {
-                        it.name == d.optString("layout", BusinessCardLayout.LEFT.name)
-                    } ?: BusinessCardLayout.LEFT,
+                        it.name == d.optString("layout", BusinessCardLayout.LEFT_ALIGNED.name)
+                    } ?: BusinessCardLayout.LEFT_ALIGNED,
                     side = BusinessCardSide.entries.firstOrNull {
                         it.name == d.optString("side", BusinessCardSide.FRONT.name)
                     } ?: BusinessCardSide.FRONT,
                     fontPair = BusinessCardFontPair.entries.firstOrNull {
-                        it.name == d.optString("fontPair", BusinessCardFontPair.SANS_CLEAN.name)
-                    } ?: BusinessCardFontPair.SANS_CLEAN,
+                        it.name == d.optString("fontPair", BusinessCardFontPair.SILIGURI_JAKARTA.name)
+                    } ?: BusinessCardFontPair.SILIGURI_JAKARTA,
                     fontSize = BusinessCardFontSize.entries.firstOrNull {
                         it.name == d.optString("fontSize", BusinessCardFontSize.MEDIUM.name)
                     } ?: BusinessCardFontSize.MEDIUM,
                     textAlign = BusinessCardTextAlign.entries.firstOrNull {
-                        it.name == d.optString("textAlign", BusinessCardTextAlign.LEFT.name)
-                    } ?: BusinessCardTextAlign.LEFT,
+                        it.name == d.optString("textAlign", BusinessCardTextAlign.AUTO.name)
+                    } ?: BusinessCardTextAlign.AUTO,
                     shopName = d.optString("shopName", ""),
                     ownerName = d.optString("ownerName", ""),
                     title = d.optString("title", ""),
@@ -178,7 +177,7 @@ object BusinessCardLocalStore {
                     backgroundOverlayAlpha = d.optDouble("backgroundOverlayAlpha", 0.45).toFloat()
                 )
             )
-        }.sortedByDescending { it.updatedAtMillis }
+        }.sortedByDescending { it.savedAtMs }
     }
 
     fun deleteCard(context: Context, id: String): List<SavedBusinessCard> {
@@ -193,8 +192,7 @@ object BusinessCardLocalStore {
             val d = card.draft
             arr.put(JSONObject().apply {
                 put("id", card.id)
-                put("createdAtMillis", card.createdAtMillis)
-                put("updatedAtMillis", card.updatedAtMillis)
+                put("savedAtMs", card.savedAtMs)
                 put("draft", JSONObject().apply {
                     put("paletteId", d.paletteId)
                     put("isLightCard", d.isLightCard)

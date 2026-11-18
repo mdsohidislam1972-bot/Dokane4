@@ -898,13 +898,15 @@ object ReceiptImageRenderer {
         return outFile
     }
 
-    fun shareReceiptPng(
+    fun shareExistingReceiptPng(
         context: Context,
+        pngFile: File,
         receipt: CompletedSaleReceipt,
-        style: ReceiptImageStyle = ReceiptImageStyle.LIGHT,
         lang: AppLanguage = AppLanguage.EN
     ): Result<File> = runCatching {
-        val pngFile = exportReceiptPng(context, receipt, style, lang)
+        if (!pngFile.exists() || pngFile.length() <= 0L) {
+            throw IllegalStateException("Exported PNG file is missing")
+        }
         val authority = "${context.packageName}.fileprovider"
         val contentUri = FileProvider.getUriForFile(context, authority, pngFile)
         val sendIntent = Intent(Intent.ACTION_SEND).apply {
@@ -925,6 +927,16 @@ object ReceiptImageRenderer {
         }
         context.startActivity(chooser)
         pngFile
+    }
+
+    fun shareReceiptPng(
+        context: Context,
+        receipt: CompletedSaleReceipt,
+        style: ReceiptImageStyle = ReceiptImageStyle.LIGHT,
+        lang: AppLanguage = AppLanguage.EN
+    ): Result<File> = runCatching {
+        val pngFile = exportReceiptPng(context, receipt, style, lang)
+        shareExistingReceiptPng(context, pngFile, receipt, lang).getOrThrow()
     }
 
     fun saveReceiptPngToGallery(

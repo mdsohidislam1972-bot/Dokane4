@@ -81,7 +81,7 @@ import com.example.util.AppLanguage
 import com.example.util.ReportDataBuilders
 import com.example.util.ReportExportUtil
 import com.example.util.ReportTableData
-import java.text.DateFormatSymbols
+import com.example.util.ShopLocale
 import java.util.Locale
 
 private data class ReportTileItem(
@@ -160,57 +160,68 @@ fun FinancialReportsHubScreen(
     }
 
     val effectivePeriod = if (isSimpleMode && period == HistoryPeriod.CUSTOM) HistoryPeriod.TODAY else period
-    val monthNames = remember { DateFormatSymbols(Locale.US).months }
-    val currentMonthLabel = "${monthNames.getOrElse(monthIndex) { "" }} $monthYear".trim()
+    val currentMonthLabel = ShopLocale.formatMonthYear(monthYear, monthIndex, currentLanguage)
+    val safeStoreName = store?.name?.ifBlank { "StoreOS" } ?: "StoreOS"
 
     fun buildReportForTile(tile: ReportTileItem): ReportTableData? {
         return when (tile.id) {
             "sales" -> ReportDataBuilders.buildSalesReportTable(
                 sales = filteredSales,
                 store = store,
-                periodLabel = effectivePeriod.labelEn,
+                periodLabel = if (currentLanguage == AppLanguage.BN) effectivePeriod.labelBn else effectivePeriod.labelEn,
                 canSeeProfit = canSeeProfit,
                 lang = currentLanguage
             )
             "daybook" -> ReportDataBuilders.buildDayBookReportTable(
                 entries = dayBookEntries,
                 store = store,
-                periodLabel = effectivePeriod.labelEn,
+                periodLabel = if (currentLanguage == AppLanguage.BN) effectivePeriod.labelBn else effectivePeriod.labelEn,
                 lang = currentLanguage
             )
             "pnl" -> ReportDataBuilders.buildProfitLossReportTable(
                 pnl = pnlStatement,
                 isStockBased = if (isFatherMode) true else isPnlStockBased,
                 store = store,
-                periodLabel = effectivePeriod.labelEn,
+                periodLabel = if (currentLanguage == AppLanguage.BN) effectivePeriod.labelBn else effectivePeriod.labelEn,
                 lang = currentLanguage,
                 isFatherMode = isFatherMode
             )
             "cust_statement" -> {
                 val rep = customerStatementReport
                 if (rep == null) {
-                    Toast.makeText(context, "Select a customer to view statement", Toast.LENGTH_SHORT).show()
+                    val msg = if (currentLanguage == AppLanguage.BN) {
+                        "বিবরণী দেখতে একজন ক্রেতা নির্বাচন করুন"
+                    } else {
+                        "Select a customer to view statement"
+                    }
+                    Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
                     storeViewModel.navigateInBusiness(BusinessNavDestination.REPORT_CUSTOMER_STATEMENT)
                     null
                 } else {
                     ReportDataBuilders.buildCustomerStatementReportTable(
                         rep = rep,
                         store = store,
-                        periodLabel = effectivePeriod.labelEn
+                        periodLabel = if (currentLanguage == AppLanguage.BN) effectivePeriod.labelBn else effectivePeriod.labelEn,
+                        lang = currentLanguage
                     )
                 }
             }
             "sup_statement" -> {
                 val rep = supplierStatementReport
                 if (rep == null) {
-                    Toast.makeText(context, "Select a supplier to view statement", Toast.LENGTH_SHORT).show()
+                    val msg = if (currentLanguage == AppLanguage.BN) {
+                        "বিবরণী দেখতে একজন মহাজন নির্বাচন করুন"
+                    } else {
+                        "Select a supplier to view statement"
+                    }
+                    Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
                     storeViewModel.navigateInBusiness(BusinessNavDestination.REPORT_SUPPLIER_STATEMENT)
                     null
                 } else {
                     ReportDataBuilders.buildSupplierStatementReportTable(
                         rep = rep,
                         store = store,
-                        periodLabel = effectivePeriod.labelEn,
+                        periodLabel = if (currentLanguage == AppLanguage.BN) effectivePeriod.labelBn else effectivePeriod.labelEn,
                         lang = currentLanguage
                     )
                 }
@@ -219,19 +230,19 @@ fun FinancialReportsHubScreen(
                 purchases = filteredPurchases,
                 returns = filteredReturns,
                 store = store,
-                periodLabel = effectivePeriod.labelEn,
+                periodLabel = if (currentLanguage == AppLanguage.BN) effectivePeriod.labelBn else effectivePeriod.labelEn,
                 lang = currentLanguage
             )
             "expenses" -> ReportDataBuilders.buildExpenseReportTable(
                 expenses = filteredExpenses,
                 store = store,
-                periodLabel = effectivePeriod.name,
+                periodLabel = if (currentLanguage == AppLanguage.BN) effectivePeriod.labelBn else effectivePeriod.labelEn,
                 lang = currentLanguage
             )
             "incomes" -> ReportDataBuilders.buildOtherIncomeReportTable(
                 incomes = filteredIncomes,
                 store = store,
-                periodLabel = effectivePeriod.name,
+                periodLabel = if (currentLanguage == AppLanguage.BN) effectivePeriod.labelBn else effectivePeriod.labelEn,
                 lang = currentLanguage
             )
             "inventory" -> ReportDataBuilders.buildInventoryReportTable(
@@ -243,7 +254,7 @@ fun FinancialReportsHubScreen(
             "staff" -> ReportDataBuilders.buildStaffReportTable(
                 staffSummary = staffReport,
                 store = store,
-                periodLabel = staffPeriod.labelEn,
+                periodLabel = if (currentLanguage == AppLanguage.BN) staffPeriod.labelBn else staffPeriod.labelEn,
                 canSeeProfit = canSeeProfit,
                 lang = currentLanguage
             )
@@ -251,6 +262,7 @@ fun FinancialReportsHubScreen(
         }
     }
 
+    val isBn = currentLanguage == AppLanguage.BN
     val visibleReports = remember(
         canHistory,
         isSimpleMode,
@@ -259,20 +271,21 @@ fun FinancialReportsHubScreen(
         canBaki,
         canSuppliers,
         canExpenses,
-        canStock
+        canStock,
+        currentLanguage
     ) {
         buildList {
             if (canHistory) {
                 add(
                     ReportTileItem(
                         id = "sales",
-                        title = "Sales Report",
-                        subtitle = "every sale",
+                        title = if (isBn) "বিক্রয় রিপোর্ট" else "Sales Report",
+                        subtitle = if (isBn) "প্রতিটি বিক্রয়" else "every sale",
                         icon = Icons.AutoMirrored.Filled.TrendingUp,
                         testTag = "report_link_sales",
                         destination = BusinessNavDestination.REPORT_SALES,
                         exportSlug = "SalesReport",
-                        shareTitle = "Sales Report"
+                        shareTitle = if (isBn) "বিক্রয় রিপোর্ট" else "Sales Report"
                     )
                 )
             }
@@ -280,13 +293,13 @@ fun FinancialReportsHubScreen(
                 add(
                     ReportTileItem(
                         id = "daybook",
-                        title = "Day Book",
-                        subtitle = "daily entries",
+                        title = if (isBn) "দৈনিক খাতা" else "Day Book",
+                        subtitle = if (isBn) "প্রতিদিনের হিসাব" else "daily entries",
                         icon = Icons.Default.Book,
                         testTag = "report_link_daybook",
                         destination = BusinessNavDestination.REPORT_DAY_BOOK,
                         exportSlug = "DayBook",
-                        shareTitle = "Day Book"
+                        shareTitle = if (isBn) "দৈনিক খাতা" else "Day Book"
                     )
                 )
             }
@@ -294,13 +307,13 @@ fun FinancialReportsHubScreen(
                 add(
                     ReportTileItem(
                         id = "pnl",
-                        title = "Profit & Loss",
-                        subtitle = "buying cost & profit",
+                        title = if (isBn) "লাভ-ক্ষতি" else "Profit & Loss",
+                        subtitle = if (isBn) "ক্রয়মূল্য ও লাভ" else "buying cost & profit",
                         icon = Icons.Default.PieChart,
                         testTag = "report_link_pnl",
                         destination = BusinessNavDestination.REPORT_PROFIT_LOSS,
                         exportSlug = "ProfitLoss",
-                        shareTitle = "Profit and Loss"
+                        shareTitle = if (isBn) "লাভ ও ক্ষতি" else "Profit and Loss"
                     )
                 )
             }
@@ -308,13 +321,13 @@ fun FinancialReportsHubScreen(
                 add(
                     ReportTileItem(
                         id = "cust_statement",
-                        title = "Customer Statement",
-                        subtitle = "pick a customer",
+                        title = if (isBn) "ক্রেতা বিবরণী" else "Customer Statement",
+                        subtitle = if (isBn) "ক্রেতা বাছুন" else "pick a customer",
                         icon = Icons.Default.People,
                         testTag = "report_link_cust_statement",
                         destination = BusinessNavDestination.REPORT_CUSTOMER_STATEMENT,
                         exportSlug = "CustomerStatement",
-                        shareTitle = "Customer Statement",
+                        shareTitle = if (isBn) "ক্রেতা বিবরণী" else "Customer Statement",
                         requiresCustomerSelection = true
                     )
                 )
@@ -323,13 +336,13 @@ fun FinancialReportsHubScreen(
                 add(
                     ReportTileItem(
                         id = "sup_statement",
-                        title = "Supplier Statement",
-                        subtitle = "pick a supplier",
+                        title = if (isBn) "মহাজন বিবরণী" else "Supplier Statement",
+                        subtitle = if (isBn) "মহাজন বাছুন" else "pick a supplier",
                         icon = Icons.Default.LocalShipping,
                         testTag = "report_link_sup_statement",
                         destination = BusinessNavDestination.REPORT_SUPPLIER_STATEMENT,
                         exportSlug = "SupplierStatement",
-                        shareTitle = "Supplier Statement",
+                        shareTitle = if (isBn) "মহাজন বিবরণী" else "Supplier Statement",
                         requiresSupplierSelection = true
                     )
                 )
@@ -338,13 +351,13 @@ fun FinancialReportsHubScreen(
                 add(
                     ReportTileItem(
                         id = "purchases",
-                        title = "Purchase Report",
-                        subtitle = "orders & dues",
+                        title = if (isBn) "ক্রয় রিপোর্ট" else "Purchase Report",
+                        subtitle = if (isBn) "অর্ডার ও দেনা" else "orders & dues",
                         icon = Icons.Default.ShoppingBag,
                         testTag = "report_link_purchases",
                         destination = BusinessNavDestination.REPORT_PURCHASES,
                         exportSlug = "PurchaseReport",
-                        shareTitle = "Purchase Report"
+                        shareTitle = if (isBn) "ক্রয় রিপোর্ট" else "Purchase Report"
                     )
                 )
             }
@@ -352,25 +365,25 @@ fun FinancialReportsHubScreen(
                 add(
                     ReportTileItem(
                         id = "expenses",
-                        title = "Expense Report",
-                        subtitle = "operating costs",
+                        title = if (isBn) "খরচ রিপোর্ট" else "Expense Report",
+                        subtitle = if (isBn) "দোকানের খরচ" else "operating costs",
                         icon = Icons.Default.Receipt,
                         testTag = "report_link_expense_report",
                         destination = BusinessNavDestination.REPORT_EXPENSES,
                         exportSlug = "ExpenseReport",
-                        shareTitle = "Expense Report"
+                        shareTitle = if (isBn) "খরচ রিপোর্ট" else "Expense Report"
                     )
                 )
                 add(
                     ReportTileItem(
                         id = "incomes",
-                        title = "Other Income",
-                        subtitle = "commissions",
+                        title = if (isBn) "অন্যান্য আয়" else "Other Income",
+                        subtitle = if (isBn) "কমিশন ও আয়" else "commissions",
                         icon = Icons.Default.AttachMoney,
                         testTag = "report_link_income_report",
                         destination = BusinessNavDestination.REPORT_INCOMES,
                         exportSlug = "OtherIncomeReport",
-                        shareTitle = "Other Income Report"
+                        shareTitle = if (isBn) "অন্যান্য আয়" else "Other Income Report"
                     )
                 )
             }
@@ -378,27 +391,31 @@ fun FinancialReportsHubScreen(
                 add(
                     ReportTileItem(
                         id = "inventory",
-                        title = "Inventory Valuation",
-                        subtitle = if (canSeeProfit) "stock at cost" else "stock & price",
+                        title = if (isBn) "মজুদ মূল্য" else "Inventory Valuation",
+                        subtitle = if (canSeeProfit) {
+                            if (isBn) "ক্রয়মূল্যে মজুদ" else "stock at cost"
+                        } else {
+                            if (isBn) "মজুদ ও দাম" else "stock & price"
+                        },
                         icon = Icons.Default.Inventory2,
                         testTag = "report_link_inventory",
                         destination = BusinessNavDestination.REPORT_INVENTORY,
                         exportSlug = "InventoryReport",
-                        shareTitle = "Inventory Report"
+                        shareTitle = if (isBn) "মজুদ রিপোর্ট" else "Inventory Report"
                     )
                 )
             }
-            if (!isFatherMode) {
+            if (!isFatherMode && !isSimpleMode) {
                 add(
                     ReportTileItem(
                         id = "staff",
-                        title = "Staff Report",
-                        subtitle = "who sold what",
+                        title = if (isBn) "কর্মী রিপোর্ট" else "Staff Report",
+                        subtitle = if (isBn) "কে কত বিক্রি করেছে" else "who sold what",
                         icon = Icons.Default.Badge,
                         testTag = "report_link_staff",
                         destination = BusinessNavDestination.REPORT_STAFF,
                         exportSlug = "StaffReport",
-                        shareTitle = "Staff Report"
+                        shareTitle = if (isBn) "কর্মী রিপোর্ট" else "Staff Report"
                     )
                 )
             }
@@ -429,26 +446,26 @@ fun FinancialReportsHubScreen(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 8.dp, vertical = 0.dp),
+                .padding(horizontal = 8.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             IconButton(
                 onClick = { storeViewModel.navigateBackInBusiness() },
                 modifier = Modifier
-                    .size(36.dp)
+                    .size(48.dp)
                     .testTag("financial_reports_back_btn")
             ) {
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = "Back",
+                    contentDescription = if (isBn) "পিছনে" else "Back",
                     tint = TextPrimary
                 )
             }
             Spacer(modifier = Modifier.width(4.dp))
             Text(
-                text = if (currentLanguage == AppLanguage.BN) "আর্থিক রিপোর্ট" else "Reports",
+                text = if (isBn) "আর্থিক রিপোর্ট" else "Reports",
                 color = TextPrimary,
-                fontSize = 19.sp,
+                fontSize = if (isFatherMode) 22.sp else 19.sp,
                 fontWeight = FontWeight.ExtraBold,
                 maxLines = 1,
                 softWrap = false,
@@ -468,6 +485,7 @@ fun FinancialReportsHubScreen(
                 item {
                     MonthlyReportHeroCard(
                         monthLabel = currentMonthLabel,
+                        currentLanguage = currentLanguage,
                         exportLanguage = exportLanguage,
                         isFatherMode = isFatherMode,
                         onSelectLanguage = { exportLanguage = it },
@@ -494,7 +512,8 @@ fun FinancialReportsHubScreen(
                                 )
                                 ReportExportUtil.downloadReportFile(context, file, exportLanguage)
                             } catch (e: Exception) {
-                                Toast.makeText(context, e.localizedMessage ?: "PDF export unavailable", Toast.LENGTH_SHORT).show()
+                                val err = if (isBn) "PDF এক্সপোর্ট করা যায়নি" else (e.localizedMessage ?: "PDF export unavailable")
+                                Toast.makeText(context, err, Toast.LENGTH_SHORT).show()
                             }
                         },
                         onExcel = {
@@ -516,7 +535,8 @@ fun FinancialReportsHubScreen(
                                 )
                                 ReportExportUtil.downloadReportFile(context, file, exportLanguage)
                             } catch (e: Exception) {
-                                Toast.makeText(context, e.localizedMessage ?: "Excel export unavailable", Toast.LENGTH_SHORT).show()
+                                val err = if (isBn) "Excel এক্সপোর্ট করা যায়নি" else (e.localizedMessage ?: "Excel export unavailable")
+                                Toast.makeText(context, err, Toast.LENGTH_SHORT).show()
                             }
                         },
                         onShare = {
@@ -537,15 +557,17 @@ fun FinancialReportsHubScreen(
                                     "MonthlyReport_${monthYear}_${monthIndex + 1}_$suffix",
                                     exportLanguage
                                 )
+                                val reportPrefix = if (exportLanguage == AppLanguage.BN) "ব্যবসার রিপোর্ট" else "Business Report"
                                 ReportExportUtil.shareReportFile(
                                     context,
                                     file,
                                     "application/pdf",
-                                    "Business Report - ${store?.name ?: "StoreOS Dokan"}",
+                                    "$reportPrefix - $safeStoreName",
                                     exportLanguage
                                 )
                             } catch (e: Exception) {
-                                Toast.makeText(context, e.localizedMessage ?: "Share unavailable", Toast.LENGTH_SHORT).show()
+                                val err = if (isBn) "শেয়ার করা যায়নি" else (e.localizedMessage ?: "Share unavailable")
+                                Toast.makeText(context, err, Toast.LENGTH_SHORT).show()
                             }
                         }
                     )
@@ -581,6 +603,8 @@ fun FinancialReportsHubScreen(
                     rowItems.forEach { item ->
                         ReportGridTile(
                             item = item,
+                            currentLanguage = currentLanguage,
+                            isFatherMode = isFatherMode,
                             onOpen = { storeViewModel.navigateInBusiness(item.destination) },
                             onDownload = {
                                 try {
@@ -593,7 +617,8 @@ fun FinancialReportsHubScreen(
                                     )
                                     ReportExportUtil.downloadReportFile(context, file, currentLanguage)
                                 } catch (e: Exception) {
-                                    Toast.makeText(context, e.localizedMessage ?: "Download failed", Toast.LENGTH_SHORT).show()
+                                    val err = if (isBn) "ডাউনলোড ব্যর্থ হয়েছে" else (e.localizedMessage ?: "Download failed")
+                                    Toast.makeText(context, err, Toast.LENGTH_SHORT).show()
                                 }
                             },
                             onShare = {
@@ -609,11 +634,12 @@ fun FinancialReportsHubScreen(
                                         context,
                                         file,
                                         "application/pdf",
-                                        "${item.shareTitle} - ${store?.name ?: "StoreOS Dokan"}",
+                                        "${item.shareTitle} - $safeStoreName",
                                         currentLanguage
                                     )
                                 } catch (e: Exception) {
-                                    Toast.makeText(context, e.localizedMessage ?: "Share unavailable", Toast.LENGTH_SHORT).show()
+                                    val err = if (isBn) "শেয়ার করা যায়নি" else (e.localizedMessage ?: "Share unavailable")
+                                    Toast.makeText(context, err, Toast.LENGTH_SHORT).show()
                                 }
                             },
                             modifier = Modifier
@@ -634,6 +660,7 @@ fun FinancialReportsHubScreen(
                         problems = healthProblems,
                         isScanning = isScanningHealth,
                         lastScanMillis = lastHealthScanMillis,
+                        currentLanguage = currentLanguage,
                         onOpenDetails = {
                             storeViewModel.navigateInBusiness(BusinessNavDestination.DATA_HEALTH_CHECK)
                         },
@@ -650,6 +677,7 @@ fun FinancialReportsHubScreen(
 @Composable
 private fun MonthlyReportHeroCard(
     monthLabel: String,
+    currentLanguage: AppLanguage,
     exportLanguage: AppLanguage,
     isFatherMode: Boolean = false,
     onSelectLanguage: (AppLanguage) -> Unit,
@@ -658,6 +686,7 @@ private fun MonthlyReportHeroCard(
     onExcel: () -> Unit,
     onShare: () -> Unit
 ) {
+    val isBn = currentLanguage == AppLanguage.BN
     val heroShape = RoundedCornerShape(20.dp)
     Surface(
         shape = heroShape,
@@ -683,8 +712,8 @@ private fun MonthlyReportHeroCard(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 10.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+                .padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -693,7 +722,7 @@ private fun MonthlyReportHeroCard(
             ) {
                 Box(
                     modifier = Modifier
-                        .size(34.dp)
+                        .size(if (isFatherMode) 42.dp else 36.dp)
                         .clip(RoundedCornerShape(10.dp))
                         .background(VividGreen.copy(alpha = 0.16f)),
                     contentAlignment = Alignment.Center
@@ -702,24 +731,24 @@ private fun MonthlyReportHeroCard(
                         imageVector = Icons.Default.Description,
                         contentDescription = null,
                         tint = VividGreen,
-                        modifier = Modifier.size(18.dp)
+                        modifier = Modifier.size(if (isFatherMode) 22.dp else 18.dp)
                     )
                 }
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "Monthly Report · $monthLabel",
+                        text = if (isBn) "মাসিক রিপোর্ট · $monthLabel" else "Monthly Report · $monthLabel",
                         color = TextPrimary,
-                        fontSize = 14.sp,
-                        lineHeight = 18.sp,
+                        fontSize = if (isFatherMode) 16.sp else 14.5.sp,
+                        lineHeight = 19.sp,
                         fontWeight = FontWeight.Bold,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis
                     )
                     Text(
-                        text = "One tap: view in app, PDF or Excel",
+                        text = if (isBn) "এক ট্যাপে দেখুন, PDF বা Excel নিন" else "One tap: view in app, PDF or Excel",
                         color = Color(0xFFD6E2D2),
-                        fontSize = 11.sp,
-                        lineHeight = 14.sp,
+                        fontSize = if (isFatherMode) 13.sp else 11.sp,
+                        lineHeight = 15.sp,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
@@ -733,7 +762,7 @@ private fun MonthlyReportHeroCard(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     HeroActionPill(
-                        label = "View",
+                        label = if (isBn) "দেখুন" else "View",
                         testTag = "reports_monthly_view_btn",
                         onClick = onView,
                         isFatherMode = isFatherMode
@@ -751,7 +780,7 @@ private fun MonthlyReportHeroCard(
                         isFatherMode = isFatherMode
                     )
                     HeroActionPill(
-                        label = "Share",
+                        label = if (isBn) "শেয়ার" else "Share",
                         testTag = "reports_monthly_share_btn",
                         onClick = onShare,
                         isFatherMode = isFatherMode
@@ -763,53 +792,52 @@ private fun MonthlyReportHeroCard(
                     horizontalArrangement = Arrangement.End,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-
-                // EN | BN Toggle
-                Surface(
-                    shape = RoundedCornerShape(16.dp),
-                    color = Color(0xCC121612),
-                    border = BorderStroke(1.dp, Color(0x30FFFFFF))
-                ) {
-                    Row(
-                        modifier = Modifier.padding(2.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                    // EN | BN Toggle
+                    Surface(
+                        shape = RoundedCornerShape(16.dp),
+                        color = Color(0xCC121612),
+                        border = BorderStroke(1.dp, Color(0x30FFFFFF))
                     ) {
-                        val enSelected = exportLanguage == AppLanguage.EN
-                        val bnSelected = exportLanguage == AppLanguage.BN
-                        Surface(
-                            onClick = { onSelectLanguage(AppLanguage.EN) },
-                            shape = RoundedCornerShape(14.dp),
-                            color = if (enSelected) Color(0xFF283226) else Color.Transparent,
-                            modifier = Modifier.testTag("reports_lang_en")
+                        Row(
+                            modifier = Modifier.padding(2.dp),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text(
-                                text = "EN",
-                                color = if (enSelected) VividGreen else TextSecondary,
-                                fontSize = 10.5.sp,
-                                fontWeight = if (enSelected) FontWeight.Bold else FontWeight.Medium,
-                                maxLines = 1,
-                                softWrap = false,
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                            )
-                        }
-                        Surface(
-                            onClick = { onSelectLanguage(AppLanguage.BN) },
-                            shape = RoundedCornerShape(14.dp),
-                            color = if (bnSelected) Color(0xFF283226) else Color.Transparent,
-                            modifier = Modifier.testTag("reports_lang_bn")
-                        ) {
-                            Text(
-                                text = "BN",
-                                color = if (bnSelected) VividGreen else TextSecondary,
-                                fontSize = 10.5.sp,
-                                fontWeight = if (bnSelected) FontWeight.Bold else FontWeight.Medium,
-                                maxLines = 1,
-                                softWrap = false,
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                            )
+                            val enSelected = exportLanguage == AppLanguage.EN
+                            val bnSelected = exportLanguage == AppLanguage.BN
+                            Surface(
+                                onClick = { onSelectLanguage(AppLanguage.EN) },
+                                shape = RoundedCornerShape(14.dp),
+                                color = if (enSelected) Color(0xFF283226) else Color.Transparent,
+                                modifier = Modifier.testTag("reports_lang_en")
+                            ) {
+                                Text(
+                                    text = "EN",
+                                    color = if (enSelected) VividGreen else TextSecondary,
+                                    fontSize = 10.5.sp,
+                                    fontWeight = if (enSelected) FontWeight.Bold else FontWeight.Medium,
+                                    maxLines = 1,
+                                    softWrap = false,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                )
+                            }
+                            Surface(
+                                onClick = { onSelectLanguage(AppLanguage.BN) },
+                                shape = RoundedCornerShape(14.dp),
+                                color = if (bnSelected) Color(0xFF283226) else Color.Transparent,
+                                modifier = Modifier.testTag("reports_lang_bn")
+                            ) {
+                                Text(
+                                    text = "BN",
+                                    color = if (bnSelected) VividGreen else TextSecondary,
+                                    fontSize = 10.5.sp,
+                                    fontWeight = if (bnSelected) FontWeight.Bold else FontWeight.Medium,
+                                    maxLines = 1,
+                                    softWrap = false,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                )
+                            }
                         }
                     }
-                }
                 }
             }
         }
@@ -829,20 +857,20 @@ private fun HeroActionPill(
         color = Color(0xCC151B14),
         border = BorderStroke(1.dp, Color(0x40FFFFFF)),
         modifier = Modifier
-            .defaultMinSize(minHeight = if (isFatherMode) 42.dp else 32.dp)
+            .defaultMinSize(minHeight = if (isFatherMode) 44.dp else 34.dp)
             .testTag(testTag)
     ) {
         Box(
             modifier = Modifier.padding(
-                horizontal = if (isFatherMode) 13.dp else 11.dp,
-                vertical = if (isFatherMode) 9.dp else 6.dp
+                horizontal = if (isFatherMode) 14.dp else 11.dp,
+                vertical = if (isFatherMode) 10.dp else 7.dp
             ),
             contentAlignment = Alignment.Center
         ) {
             Text(
                 text = label,
                 color = TextPrimary,
-                fontSize = if (isFatherMode) 13.sp else 11.sp,
+                fontSize = if (isFatherMode) 13.5.sp else 11.5.sp,
                 lineHeight = 15.sp,
                 fontWeight = FontWeight.SemiBold,
                 maxLines = 1,
@@ -855,11 +883,14 @@ private fun HeroActionPill(
 @Composable
 private fun ReportGridTile(
     item: ReportTileItem,
+    currentLanguage: AppLanguage,
+    isFatherMode: Boolean = false,
     onOpen: () -> Unit,
     onDownload: () -> Unit,
     onShare: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val isBn = currentLanguage == AppLanguage.BN
     val tileShape = RoundedCornerShape(18.dp)
     val bgBrush = Brush.verticalGradient(
         colors = listOf(Color(0xEB222622), Color(0xEE121412))
@@ -874,7 +905,7 @@ private fun ReportGridTile(
         color = Color.Transparent,
         border = BorderStroke(1.dp, borderBrush),
         modifier = modifier
-            .defaultMinSize(minHeight = 114.dp)
+            .defaultMinSize(minHeight = if (isFatherMode) 128.dp else 114.dp)
             .clip(tileShape)
             .background(bgBrush)
             .testTag(item.testTag)
@@ -882,7 +913,7 @@ private fun ReportGridTile(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(10.dp),
+                .padding(11.dp),
             verticalArrangement = Arrangement.SpaceBetween
         ) {
             // Top Row: Glowing Green Circle Icon + Download & Share
@@ -895,14 +926,14 @@ private fun ReportGridTile(
                     shape = CircleShape,
                     color = VividGreen.copy(alpha = 0.14f),
                     border = BorderStroke(1.2.dp, VividGreen.copy(alpha = 0.72f)),
-                    modifier = Modifier.size(30.dp)
+                    modifier = Modifier.size(if (isFatherMode) 36.dp else 32.dp)
                 ) {
                     Box(contentAlignment = Alignment.Center) {
                         Icon(
                             imageVector = item.icon,
                             contentDescription = null,
                             tint = VividGreen,
-                            modifier = Modifier.size(15.dp)
+                            modifier = Modifier.size(if (isFatherMode) 18.dp else 15.dp)
                         )
                     }
                 }
@@ -913,7 +944,7 @@ private fun ReportGridTile(
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(20.dp)
+                            .size(28.dp)
                             .clip(CircleShape)
                             .clickable(onClick = onDownload)
                             .testTag("${item.testTag}_download"),
@@ -921,14 +952,14 @@ private fun ReportGridTile(
                     ) {
                         Icon(
                             imageVector = Icons.Default.Download,
-                            contentDescription = "Download ${item.title}",
+                            contentDescription = if (isBn) "${item.title} ডাউনলোড" else "Download ${item.title}",
                             tint = TextSecondary,
-                            modifier = Modifier.size(14.dp)
+                            modifier = Modifier.size(15.dp)
                         )
                     }
                     Box(
                         modifier = Modifier
-                            .size(20.dp)
+                            .size(28.dp)
                             .clip(CircleShape)
                             .clickable(onClick = onShare)
                             .testTag("${item.testTag}_share"),
@@ -936,9 +967,9 @@ private fun ReportGridTile(
                     ) {
                         Icon(
                             imageVector = Icons.Default.Share,
-                            contentDescription = "Share ${item.title}",
+                            contentDescription = if (isBn) "${item.title} শেয়ার" else "Share ${item.title}",
                             tint = TextSecondary,
-                            modifier = Modifier.size(13.dp)
+                            modifier = Modifier.size(14.dp)
                         )
                     }
                 }
@@ -951,9 +982,9 @@ private fun ReportGridTile(
                 Text(
                     text = item.title,
                     color = TextPrimary,
-                    fontSize = 12.5.sp,
+                    fontSize = if (isFatherMode) 14.5.sp else 12.5.sp,
                     fontWeight = FontWeight.Bold,
-                    lineHeight = 15.sp,
+                    lineHeight = 16.sp,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -966,7 +997,7 @@ private fun ReportGridTile(
                     Text(
                         text = item.subtitle,
                         color = TextMuted,
-                        fontSize = 10.sp,
+                        fontSize = if (isFatherMode) 11.5.sp else 10.sp,
                         lineHeight = 13.sp,
                         maxLines = 1,
                         softWrap = false,
@@ -990,22 +1021,29 @@ private fun DataHealthCheckBar(
     problems: List<HealthProblem>?,
     isScanning: Boolean,
     lastScanMillis: Long?,
+    currentLanguage: AppLanguage,
     onOpenDetails: () -> Unit,
     onScan: () -> Unit
 ) {
+    val isBn = currentLanguage == AppLanguage.BN
+    val hasScanned = lastScanMillis != null && lastScanMillis > 0L
     val barShape = RoundedCornerShape(18.dp)
-    val hasIssues = problems != null && problems.isNotEmpty()
-    val isHealthy = problems != null && problems.isEmpty()
+    val hasIssues = hasScanned && problems != null && problems.isNotEmpty()
+    val isHealthy = hasScanned && problems != null && problems.isEmpty()
     val amberTint = Color(0xFFFFB300)
-    val accentColor = when {
-        hasIssues -> amberTint
-        else -> VividGreen
-    }
+    val accentColor = if (hasIssues) amberTint else VividGreen
+
     val statusText = when {
-        isScanning -> "Scanning records..."
-        problems == null -> "Tap Scan to verify records"
-        isHealthy -> "All checks passed${formatScanAgo(lastScanMillis)}"
-        else -> "${problems.size} issue${if (problems.size == 1) "" else "s"} found"
+        isScanning -> if (isBn) "হিসাব যাচাই চলছে..." else "Scanning records..."
+        !hasScanned -> if (isBn) "হিসাব যাচাই করতে স্ক্যান করুন" else "Tap Scan to verify records"
+        isHealthy -> {
+            val ago = ShopLocale.formatTimeAgo(lastScanMillis, currentLanguage)
+            if (isBn) "সব ঠিক আছে · $ago" else "All checks passed · $ago"
+        }
+        else -> {
+            val count = ShopLocale.formatNumber((problems?.size ?: 0).toLong(), currentLanguage)
+            if (isBn) "$count টি অসঙ্গতি পাওয়া গেছে" else "$count issue${if ((problems?.size ?: 0) == 1) "" else "s"} found"
+        }
     }
 
     Surface(
@@ -1065,7 +1103,7 @@ private fun DataHealthCheckBar(
 
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "Data Health Check",
+                        text = if (isBn) "ডেটা হেলথ চেক" else "Data Health Check",
                         color = TextPrimary,
                         fontSize = 12.5.sp,
                         lineHeight = 16.sp,
@@ -1098,7 +1136,7 @@ private fun DataHealthCheckBar(
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
-                            text = if (isScanning) "..." else "Scan",
+                            text = if (isScanning) "..." else if (isBn) "স্ক্যান" else "Scan",
                             color = TextPrimary,
                             fontSize = 11.5.sp,
                             lineHeight = 14.sp,
@@ -1110,15 +1148,5 @@ private fun DataHealthCheckBar(
                 }
             }
         }
-    }
-}
-
-private fun formatScanAgo(lastScanMillis: Long?): String {
-    if (lastScanMillis == null) return ""
-    val diffSec = ((System.currentTimeMillis() - lastScanMillis) / 1000L).coerceAtLeast(0L)
-    return when {
-        diffSec < 60L -> " · just now"
-        diffSec < 3600L -> " · ${diffSec / 60L}m ago"
-        else -> " · ${diffSec / 3600L}h ago"
     }
 }

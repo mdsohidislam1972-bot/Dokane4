@@ -87,9 +87,16 @@ object StoreBackupCodec {
             put("presets", JSONArray().apply {
                 payload.units.presets.forEach { preset ->
                     put(JSONObject().apply {
+                        put("id", preset.id)
+                        put("labelEn", preset.labelEn)
+                        put("labelBn", preset.labelBn)
+                        put("category", preset.category)
+                        put("stockUnit", preset.stockUnit)
                         put("buyUnit", preset.buyUnit)
-                        put("sellUnit", preset.sellUnit)
-                        put("factor", preset.factor)
+                        put("buyConversion", preset.buyConversion)
+                        put("sellUnits", JSONObject().apply {
+                            preset.sellUnits.forEach { (k, v) -> put(k, v) }
+                        })
                     })
                 }
             })
@@ -446,11 +453,28 @@ object StoreBackupCodec {
         unitsObj.optJSONArray("presets")?.let { arr ->
             for (i in 0 until arr.length()) {
                 val o = arr.optJSONObject(i) ?: continue
+                val sellUnitsObj = o.optJSONObject("sellUnits")
+                val sellUnitsMap = mutableMapOf<String, Double>()
+                sellUnitsObj?.keys()?.forEach { k ->
+                    val v = sellUnitsObj.optDouble(k, 1.0)
+                    if (v > 0.0) sellUnitsMap[k] = v
+                }
+                val legacySellUnit = o.optString("sellUnit", "")
+                if (sellUnitsMap.isEmpty() && legacySellUnit.isNotBlank()) {
+                    sellUnitsMap[legacySellUnit] = o.optDouble("factor", 1.0)
+                }
+                val stockUnit = o.optString("stockUnit", "").ifBlank { legacySellUnit.ifBlank { "pcs" } }
+                val buyUnit = o.optString("buyUnit", stockUnit)
                 presets.add(
                     ShopUnitPreset(
-                        buyUnit = o.optString("buyUnit", ""),
-                        sellUnit = o.optString("sellUnit", ""),
-                        factor = o.optDouble("factor", 1.0)
+                        id = o.optString("id", "preset_${i + 1}"),
+                        labelEn = o.optString("labelEn", "$buyUnit -> $stockUnit"),
+                        labelBn = o.optString("labelBn", "$buyUnit -> $stockUnit"),
+                        category = o.optString("category", "General"),
+                        stockUnit = stockUnit,
+                        buyUnit = buyUnit,
+                        buyConversion = o.optDouble("buyConversion", o.optDouble("factor", 1.0)),
+                        sellUnits = sellUnitsMap
                     )
                 )
             }

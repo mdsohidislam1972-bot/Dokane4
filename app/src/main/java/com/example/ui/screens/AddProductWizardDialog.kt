@@ -472,6 +472,8 @@ fun AddProductWizardDialog(
                                 Text(
                                     text = if (isFatherMode) {
                                         ShopLocale.get("father_move_to_bin_title", currentLanguage)
+                                    } else if (currentLanguage == AppLanguage.BN) {
+                                        "পণ্য মুছে ফেলবেন?"
                                     } else {
                                         "Delete Product?"
                                     },
@@ -485,7 +487,7 @@ fun AddProductWizardDialog(
                                     onClick = { showDeleteConfirm = false },
                                     modifier = Modifier.size(36.dp)
                                 ) {
-                                    Icon(Icons.Default.Close, contentDescription = "Close", tint = TextMuted)
+                                    Icon(Icons.Default.Close, contentDescription = ShopLocale.get("close", currentLanguage), tint = TextMuted)
                                 }
                             }
 
@@ -494,6 +496,8 @@ fun AddProductWizardDialog(
                             Text(
                                 text = if (isFatherMode) {
                                     ShopLocale.format("father_move_to_bin_desc", currentLanguage, productToEdit?.name ?: "")
+                                } else if (currentLanguage == AppLanguage.BN) {
+                                    "'${productToEdit?.name}' মুছে ফেলতে চান? বর্তমান স্টক ও তথ্য মুছে যাবে।"
                                 } else {
                                     "Are you sure you want to delete '${productToEdit?.name}'? All current inventory and details will be removed. This action cannot be undone."
                                 },
@@ -516,6 +520,8 @@ fun AddProductWizardDialog(
                                 VividButton(
                                     text = if (isFatherMode) {
                                         ShopLocale.get("father_move_to_bin_btn", currentLanguage)
+                                    } else if (currentLanguage == AppLanguage.BN) {
+                                        "মুছুন"
                                     } else {
                                         "Delete"
                                     },
@@ -571,6 +577,7 @@ fun AddProductWizardDialog(
 
                         WizardStepperHeader(
                             currentStep = step,
+                            currentLanguage = currentLanguage,
                             modifier = Modifier.weight(1f)
                         )
 
@@ -611,15 +618,20 @@ fun AddProductWizardDialog(
                             Column {
                                 Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                                     Text(
-                                        text = if (isEditMode) "Edit Product" else "Basics",
+                                        text = when {
+                                            isEditMode && currentLanguage == AppLanguage.BN -> "পণ্য সম্পাদনা"
+                                            isEditMode -> "Edit Product"
+                                            currentLanguage == AppLanguage.BN -> "মূল তথ্য"
+                                            else -> "Basics"
+                                        },
                                         color = TextPrimary,
-                                        fontSize = 24.sp,
+                                        fontSize = if (isFatherMode) 26.sp else 24.sp,
                                         fontWeight = FontWeight.ExtraBold,
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis
                                     )
                                     Text(
-                                        text = "Step 1 of 3: Basics",
+                                        text = if (currentLanguage == AppLanguage.BN) "ধাপ ১ / ৩: মূল তথ্য" else "Step 1 of 3: Basics",
                                         color = VividGreen,
                                         fontSize = 12.sp,
                                         fontWeight = FontWeight.SemiBold,
@@ -634,7 +646,7 @@ fun AddProductWizardDialog(
                                         name = it
                                         stepError = null
                                     },
-                                    label = "Product Name (English) *",
+                                    label = if (currentLanguage == AppLanguage.BN) "পণ্যের নাম (ইংরেজি) *" else "Product Name (English) *",
                                     placeholder = "e.g. Miniket Rice 5kg",
                                     testTag = "wizard_name_en"
                                 )
@@ -644,7 +656,7 @@ fun AddProductWizardDialog(
                                 GlassTextField(
                                     value = nameBn,
                                     onValueChange = { nameBn = it },
-                                    label = "Product Name (বাংলা - Optional)",
+                                    label = if (currentLanguage == AppLanguage.BN) "পণ্যের নাম (বাংলা - ঐচ্ছিক)" else "Product Name (বাংলা - Optional)",
                                     placeholder = "যেমনঃ মিনিকেট চাল ৫ কেজি",
                                     testTag = "wizard_name_bn"
                                 )
@@ -652,7 +664,7 @@ fun AddProductWizardDialog(
                                 Spacer(modifier = Modifier.height(12.dp))
 
                                 Text(
-                                    text = "Category",
+                                    text = if (currentLanguage == AppLanguage.BN) "ক্যাটাগরি" else "Category",
                                     color = TextSecondary,
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.Medium
@@ -1078,7 +1090,11 @@ fun AddProductWizardDialog(
                                     verticalArrangement = Arrangement.spacedBy(10.dp)
                                 ) {
                                     Text(
-                                        text = if (photoUriString.isNotBlank()) "Product Photo" else "Add Optional Photo",
+                                        text = if (photoUriString.isNotBlank()) {
+                                            if (currentLanguage == AppLanguage.BN) "পণ্যের ছবি" else "Product Photo"
+                                        } else {
+                                            if (currentLanguage == AppLanguage.BN) "ঐচ্ছিক ছবি যোগ করুন" else "Add Optional Photo"
+                                        },
                                         color = TextPrimary,
                                         fontSize = 13.sp,
                                         fontWeight = FontWeight.SemiBold,
@@ -1209,7 +1225,7 @@ fun AddProductWizardDialog(
                                         }
                                     } else {
                                         Text(
-                                            text = "Uses category icon if omitted",
+                                            text = if (currentLanguage == AppLanguage.BN) "ছবি না দিলে ক্যাটাগরি আইকন দেখাবে" else "Uses category icon if omitted",
                                             color = TextMuted,
                                             fontSize = 11.sp,
                                             maxLines = 1,
@@ -1243,7 +1259,7 @@ fun AddProductWizardDialog(
                                                 )
                                                 Spacer(modifier = Modifier.width(8.dp))
                                                 Text(
-                                                    text = "Take Photo",
+                                                    text = if (currentLanguage == AppLanguage.BN) "ছবি তুলুন" else "Take Photo",
                                                     color = TextPrimary,
                                                     fontSize = 13.sp,
                                                     fontWeight = FontWeight.SemiBold,
@@ -1283,7 +1299,7 @@ fun AddProductWizardDialog(
                                                 )
                                                 Spacer(modifier = Modifier.width(8.dp))
                                                 Text(
-                                                    text = "Choose from Gallery",
+                                                    text = if (currentLanguage == AppLanguage.BN) "গ্যালারি থেকে বাছাই করুন" else "Choose from Gallery",
                                                     color = TextPrimary,
                                                     fontSize = 13.sp,
                                                     fontWeight = FontWeight.SemiBold,
@@ -1302,7 +1318,7 @@ fun AddProductWizardDialog(
                                     GlassTextField(
                                         value = barcodeInput,
                                         onValueChange = { barcodeInput = it },
-                                        label = "Barcode (Optional)",
+                                        label = if (currentLanguage == AppLanguage.BN) "বারকোড (ঐচ্ছিক)" else "Barcode (Optional)",
                                         placeholder = "e.g. 890123456789",
                                         testTag = "wizard_barcode"
                                     )
@@ -1312,7 +1328,7 @@ fun AddProductWizardDialog(
                                     GlassTextField(
                                         value = itemLocationInput,
                                         onValueChange = { itemLocationInput = it },
-                                        label = "Item Location (Optional)",
+                                        label = if (currentLanguage == AppLanguage.BN) "তাকের অবস্থান (ঐচ্ছিক)" else "Item Location (Optional)",
                                         placeholder = "e.g. Shelf A-2",
                                         testTag = "wizard_item_location"
                                     )
@@ -1322,13 +1338,18 @@ fun AddProductWizardDialog(
 
                         2 -> {
                             // STEP 2: PRICING (BUY/SELL TILES + LIVE PROFIT/MARGIN + DETAILED WHOLESALE/MRP + LOW STOCK ALERT PILL)
-                            val buy = buyPriceInput.toDoubleOrNull() ?: 0.0
-                            val sell = sellPriceInput.toDoubleOrNull() ?: 0.0
+                            val buy = ShopLocale.toAsciiDigits(buyPriceInput).toDoubleOrNull() ?: 0.0
+                            val sell = ShopLocale.toAsciiDigits(sellPriceInput).toDoubleOrNull() ?: 0.0
+                            val parsedConvForPricing = if (buyUnit.equals(selectedUnit, ignoreCase = true)) {
+                                1.0
+                            } else {
+                                (ShopLocale.toAsciiDigits(buyConversionInput).toDoubleOrNull() ?: 1.0).coerceAtLeast(0.0001)
+                            }
                             val profitPerPiece = CalculationEngine.calculateProfitPerPiece(sell, buy)
                             val margin = CalculationEngine.calculateMarginPercent(sell, buy)
                             val isNegativeProfit = profitPerPiece < 0.0
                             val accentColor = if (isNegativeProfit) AlertRed else VividGreen
-                            val unitDisplayName = if (selectedUnit.equals("pcs", ignoreCase = true)) "piece" else selectedUnit
+                            val unitDisplayName = ShopLocale.displayUnit(selectedUnit, currentLanguage)
 
                             Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
                                 // Centered Frosted Glass Product Photo / Camera Orb with Edit Badge (tap to jump to Basics to change photo)
@@ -1407,9 +1428,9 @@ fun AddProductWizardDialog(
 
                                 // Pricing Heading
                                 Text(
-                                    text = "Pricing",
+                                    text = if (currentLanguage == AppLanguage.BN) "মূল্য নির্ধারণ" else "Pricing",
                                     color = TextPrimary,
-                                    fontSize = 30.sp,
+                                    fontSize = if (isFatherMode) 32.sp else 30.sp,
                                     fontWeight = FontWeight.ExtraBold,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis
@@ -1422,7 +1443,7 @@ fun AddProductWizardDialog(
                                         horizontalArrangement = Arrangement.spacedBy(12.dp)
                                     ) {
                                         PricingBigGlassInputTile(
-                                            label = "BUY PRICE",
+                                            label = if (currentLanguage == AppLanguage.BN) "ক্রয় মূল্য ($unitDisplayName)" else "BUY PRICE ($unitDisplayName)",
                                             value = buyPriceInput,
                                             onValueChange = {
                                                 buyPriceInput = it
@@ -1433,7 +1454,7 @@ fun AddProductWizardDialog(
                                         )
 
                                         PricingBigGlassInputTile(
-                                            label = "SELL PRICE",
+                                            label = if (currentLanguage == AppLanguage.BN) "বিক্রয় মূল্য ($unitDisplayName)" else "SELL PRICE ($unitDisplayName)",
                                             value = sellPriceInput,
                                             onValueChange = {
                                                 sellPriceInput = it
@@ -1445,7 +1466,7 @@ fun AddProductWizardDialog(
                                     }
                                 } else {
                                     PricingBigGlassInputTile(
-                                        label = "SELL PRICE",
+                                        label = if (currentLanguage == AppLanguage.BN) "বিক্রয় মূল্য ($unitDisplayName)" else "SELL PRICE ($unitDisplayName)",
                                         value = sellPriceInput,
                                         onValueChange = {
                                             sellPriceInput = it
@@ -1510,7 +1531,7 @@ fun AddProductWizardDialog(
                                                     verticalArrangement = Arrangement.spacedBy(4.dp)
                                                 ) {
                                                     Text(
-                                                        text = "Profit per $unitDisplayName",
+                                                        text = if (currentLanguage == AppLanguage.BN) "প্রতি $unitDisplayName লাভ" else "Profit per $unitDisplayName",
                                                         color = Color(0xFFD6E2D2),
                                                         fontSize = 13.sp,
                                                         fontWeight = FontWeight.Medium,
@@ -1539,7 +1560,7 @@ fun AddProductWizardDialog(
                                                         verticalAlignment = Alignment.CenterVertically
                                                     ) {
                                                         Text(
-                                                            text = "Margin",
+                                                            text = if (currentLanguage == AppLanguage.BN) "মার্জিন" else "Margin",
                                                             color = Color(0xFFD6E2D2),
                                                             fontSize = 12.5.sp,
                                                             fontWeight = FontWeight.Medium,
@@ -1564,6 +1585,20 @@ fun AddProductWizardDialog(
                                                         modifier = Modifier.testTag("wizard_live_margin_value")
                                                     )
                                                 }
+                                            }
+                                            if (!buyUnit.equals(selectedUnit, ignoreCase = true) && buy > 0.0) {
+                                                val boxCost = CalculationEngine.buyPriceInBuyUnit(buy, parsedConvForPricing)
+                                                Text(
+                                                    text = if (currentLanguage == AppLanguage.BN) {
+                                                        "প্রতি ${ShopLocale.displayUnit(buyUnit, currentLanguage)} খরচ: ${ShopLocale.formatMoney(boxCost, currentLanguage)} • প্রতি $unitDisplayName খরচ: ${ShopLocale.formatMoney(buy, currentLanguage)}"
+                                                    } else {
+                                                        "Cost per $buyUnit: ${ShopLocale.formatMoney(boxCost, currentLanguage)} • Cost per $unitDisplayName: ${ShopLocale.formatMoney(buy, currentLanguage)}"
+                                                    },
+                                                    color = Color(0xFFB5C7B0),
+                                                    fontSize = 11.5.sp,
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis
+                                                )
                                             }
 
                                             // Live Margin Progress Bar
@@ -1608,7 +1643,7 @@ fun AddProductWizardDialog(
                                             horizontalArrangement = Arrangement.spacedBy(12.dp)
                                         ) {
                                             PricingBigGlassInputTile(
-                                                label = "WHOLESALE",
+                                                label = if (currentLanguage == AppLanguage.BN) "পাইকারি" else "WHOLESALE",
                                                 value = wholesalePriceInput,
                                                 onValueChange = {
                                                     wholesalePriceInput = it
@@ -1619,7 +1654,7 @@ fun AddProductWizardDialog(
                                             )
 
                                             PricingBigGlassInputTile(
-                                                label = "MRP",
+                                                label = if (currentLanguage == AppLanguage.BN) "সর্বোচ্চ খুচরা" else "MRP",
                                                 value = mrpInput,
                                                 onValueChange = {
                                                     mrpInput = it
@@ -1631,7 +1666,7 @@ fun AddProductWizardDialog(
                                         }
 
                                         PricingBigGlassInputTile(
-                                            label = "PARTY RATE (OPTIONAL)",
+                                            label = if (currentLanguage == AppLanguage.BN) "পার্টি রেট (ঐচ্ছিক)" else "PARTY RATE (OPTIONAL)",
                                             value = partyRateInput,
                                             onValueChange = {
                                                 partyRateInput = it
@@ -1644,7 +1679,7 @@ fun AddProductWizardDialog(
                                 }
 
                                 // Low Stock Alert Stepper Pill
-                                val currentLowLimit = (lowStockLimitInput.toDoubleOrNull() ?: 5.0).coerceAtLeast(0.0)
+                                val currentLowLimit = (ShopLocale.toAsciiDigits(lowStockLimitInput).toDoubleOrNull() ?: 5.0).coerceAtLeast(0.0)
                                 val alertPillShape = RoundedCornerShape(22.dp)
                                 Surface(
                                     shape = alertPillShape,
@@ -1672,7 +1707,7 @@ fun AddProductWizardDialog(
                                         horizontalArrangement = Arrangement.SpaceBetween
                                     ) {
                                         Text(
-                                            text = "Low stock alert at",
+                                            text = if (currentLanguage == AppLanguage.BN) "কম স্টক সতর্কতা" else "Low stock alert at",
                                             color = TextPrimary,
                                             fontSize = 14.sp,
                                             fontWeight = FontWeight.Medium,
@@ -1766,28 +1801,28 @@ fun AddProductWizardDialog(
 
                         3 -> {
                             // STEP 3: STOCK & REVIEW
-                            val buy = buyPriceInput.toDoubleOrNull() ?: 0.0
-                            val sell = sellPriceInput.toDoubleOrNull() ?: 0.0
-                            val qty = CalculationEngine.roundStock((stockInput.toDoubleOrNull() ?: 0.0).coerceAtLeast(0.0))
-                            val lowLimit = CalculationEngine.roundStock((lowStockLimitInput.toDoubleOrNull() ?: 5.0).coerceAtLeast(0.0))
+                            val buy = ShopLocale.toAsciiDigits(buyPriceInput).toDoubleOrNull() ?: 0.0
+                            val sell = ShopLocale.toAsciiDigits(sellPriceInput).toDoubleOrNull() ?: 0.0
+                            val qty = CalculationEngine.roundStock((ShopLocale.toAsciiDigits(stockInput).toDoubleOrNull() ?: 0.0).coerceAtLeast(0.0))
+                            val lowLimit = CalculationEngine.roundStock((ShopLocale.toAsciiDigits(lowStockLimitInput).toDoubleOrNull() ?: 5.0).coerceAtLeast(0.0))
                             val parsedBuyConv = if (buyUnit.equals(selectedUnit, ignoreCase = true)) {
                                 1.0
                             } else {
-                                CalculationEngine.roundStock((buyConversionInput.toDoubleOrNull() ?: 1.0).coerceAtLeast(0.0001))
+                                CalculationEngine.roundStock((ShopLocale.toAsciiDigits(buyConversionInput).toDoubleOrNull() ?: 1.0).coerceAtLeast(0.0001))
                             }
 
                             Column {
                                 Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                                     Text(
-                                        text = "Stock & Review",
+                                        text = if (currentLanguage == AppLanguage.BN) "স্টক ও পর্যালোচনা" else "Stock & Review",
                                         color = TextPrimary,
-                                        fontSize = 24.sp,
+                                        fontSize = if (isFatherMode) 26.sp else 24.sp,
                                         fontWeight = FontWeight.ExtraBold,
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis
                                     )
                                     Text(
-                                        text = "Step 3 of 3: Stock & Review",
+                                        text = if (currentLanguage == AppLanguage.BN) "ধাপ ৩ / ৩: স্টক ও পর্যালোচনা" else "Step 3 of 3: Stock & Review",
                                         color = VividGreen,
                                         fontSize = 12.sp,
                                         fontWeight = FontWeight.SemiBold,
@@ -1804,7 +1839,7 @@ fun AddProductWizardDialog(
                                         stockInput = it
                                         stepError = null
                                     },
-                                    label = "Stock Quantity ($selectedUnit)",
+                                    label = if (currentLanguage == AppLanguage.BN) "স্টকের পরিমাণ (${ShopLocale.displayUnit(selectedUnit, currentLanguage)})" else "Stock Quantity ($selectedUnit)",
                                     placeholder = "10",
                                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                                     testTag = "wizard_stock_qty"
@@ -1818,7 +1853,7 @@ fun AddProductWizardDialog(
                                         lowStockLimitInput = it
                                         stepError = null
                                     },
-                                    label = "Low-Stock Alert Limit ($selectedUnit)",
+                                    label = if (currentLanguage == AppLanguage.BN) "কম স্টক সতর্কতা সীমা (${ShopLocale.displayUnit(selectedUnit, currentLanguage)})" else "Low-Stock Alert Limit ($selectedUnit)",
                                     placeholder = "5",
                                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                                     testTag = "wizard_low_limit"
@@ -1830,7 +1865,7 @@ fun AddProductWizardDialog(
                                 GlassCard(modifier = Modifier.fillMaxWidth()) {
                                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                         Text(
-                                            text = "Summary Review",
+                                            text = if (currentLanguage == AppLanguage.BN) "সারসংক্ষেপ" else "Summary Review",
                                             color = TextPrimary,
                                             fontSize = 14.sp,
                                             fontWeight = FontWeight.Bold,
@@ -1838,7 +1873,7 @@ fun AddProductWizardDialog(
                                             softWrap = false
                                         )
                                         Text(
-                                            text = "$name ($selectedCategory · $selectedUnit)",
+                                            text = "$name (${ShopLocale.displayCategory(selectedCategory, currentLanguage)} · ${ShopLocale.displayUnit(selectedUnit, currentLanguage)})",
                                             color = TextSecondary,
                                             fontSize = 13.sp,
                                             maxLines = 1,
@@ -1847,7 +1882,7 @@ fun AddProductWizardDialog(
                                         )
                                         if (!buyUnit.equals(selectedUnit, ignoreCase = true)) {
                                             Text(
-                                                text = "Buy: 1 $buyUnit = ${ShopLocale.formatNumber(parsedBuyConv, currentLanguage)} $selectedUnit",
+                                                text = "${if (currentLanguage == AppLanguage.BN) "ক্রয়" else "Buy"}: 1 ${ShopLocale.displayUnit(buyUnit, currentLanguage)} = ${ShopLocale.formatNumber(parsedBuyConv, currentLanguage)} ${ShopLocale.displayUnit(selectedUnit, currentLanguage)}",
                                                 color = TextSecondary,
                                                 fontSize = 12.sp,
                                                 maxLines = 1,
@@ -1857,10 +1892,10 @@ fun AddProductWizardDialog(
                                         }
                                         if (sellUnitInputs.isNotEmpty()) {
                                             val sellSummary = sellUnitInputs.entries.joinToString(", ") { (su, f) ->
-                                                "1 $selectedUnit = ${f.ifBlank { "?" }} $su"
+                                                "1 ${ShopLocale.displayUnit(selectedUnit, currentLanguage)} = ${f.ifBlank { "?" }} ${ShopLocale.displayUnit(su, currentLanguage)}"
                                             }
                                             Text(
-                                                text = "Sell: $sellSummary",
+                                                text = "${if (currentLanguage == AppLanguage.BN) "বিক্রয় একক" else "Sell"}: $sellSummary",
                                                 color = TextSecondary,
                                                 fontSize = 12.sp,
                                                 maxLines = 1,
@@ -1869,9 +1904,13 @@ fun AddProductWizardDialog(
                                             )
                                         }
                                         val priceReviewText = if (canSeeBuyingPrice) {
-                                            "Buy: ${ShopLocale.formatMoney(buy, currentLanguage)} | Sell: ${ShopLocale.formatMoney(sell, currentLanguage)}"
+                                            if (currentLanguage == AppLanguage.BN) {
+                                                "ক্রয়: ${ShopLocale.formatMoney(buy, currentLanguage)} | বিক্রয়: ${ShopLocale.formatMoney(sell, currentLanguage)}"
+                                            } else {
+                                                "Buy: ${ShopLocale.formatMoney(buy, currentLanguage)} | Sell: ${ShopLocale.formatMoney(sell, currentLanguage)}"
+                                            }
                                         } else {
-                                            "Sale Price: ${ShopLocale.formatMoney(sell, currentLanguage)}"
+                                            "${if (currentLanguage == AppLanguage.BN) "বিক্রয় মূল্য" else "Sale Price"}: ${ShopLocale.formatMoney(sell, currentLanguage)}"
                                         }
                                         Text(
                                             text = priceReviewText,
@@ -1883,7 +1922,11 @@ fun AddProductWizardDialog(
                                             overflow = TextOverflow.Ellipsis
                                         )
                                         Text(
-                                            text = "Stock: ${ShopLocale.formatNumber(qty, currentLanguage)} $selectedUnit (Low: ${ShopLocale.formatNumber(lowLimit, currentLanguage)})",
+                                            text = if (currentLanguage == AppLanguage.BN) {
+                                                "স্টক: ${ShopLocale.formatNumber(qty, currentLanguage)} ${ShopLocale.displayUnit(selectedUnit, currentLanguage)} (সতর্কতা: ${ShopLocale.formatNumber(lowLimit, currentLanguage)})"
+                                            } else {
+                                                "Stock: ${ShopLocale.formatNumber(qty, currentLanguage)} $selectedUnit (Low: ${ShopLocale.formatNumber(lowLimit, currentLanguage)})"
+                                            },
                                             color = TextMuted,
                                             fontSize = 12.sp,
                                             maxLines = 1,
@@ -1932,7 +1975,7 @@ fun AddProductWizardDialog(
                             ) {
                                 Box(contentAlignment = Alignment.Center) {
                                     Text(
-                                        text = "Back",
+                                        text = ShopLocale.get("back", currentLanguage),
                                         color = TextPrimary,
                                         fontSize = 15.sp,
                                         fontWeight = FontWeight.SemiBold,
@@ -1949,42 +1992,42 @@ fun AddProductWizardDialog(
                                 onClick = {
                                     if (step == 1) {
                                         if (name.isBlank()) {
-                                            stepError = "Please enter product name"
+                                            stepError = if (currentLanguage == AppLanguage.BN) "পণ্যের নাম লিখুন" else "Please enter product name"
                                             return@Surface
                                         }
                                         if (!buyUnit.equals(selectedUnit, ignoreCase = true)) {
-                                            val convVal = buyConversionInput.toDoubleOrNull()
+                                            val convVal = ShopLocale.toAsciiDigits(buyConversionInput).toDoubleOrNull()
                                             if (convVal == null || convVal <= 0.0) {
-                                                stepError = "Conversion must be greater than 0"
+                                                stepError = if (currentLanguage == AppLanguage.BN) "রূপান্তর মান ০-এর বেশি হতে হবে" else "Conversion must be greater than 0"
                                                 return@Surface
                                             }
                                         }
                                         val invalidSell = sellUnitInputs.entries.any { (_, v) ->
-                                            val f = v.toDoubleOrNull()
+                                            val f = ShopLocale.toAsciiDigits(v).toDoubleOrNull()
                                             f == null || f <= 0.0
                                         }
                                         if (invalidSell) {
-                                            stepError = "Selling unit conversion must be > 0"
+                                            stepError = if (currentLanguage == AppLanguage.BN) "বিক্রয় এককের মান ০-এর বেশি হতে হবে" else "Selling unit conversion must be > 0"
                                             return@Surface
                                         }
                                     }
                                     if (step == 2) {
-                                        val buy = if (canSeeBuyingPrice) buyPriceInput.toDoubleOrNull() else 0.0
-                                        val sell = sellPriceInput.toDoubleOrNull()
+                                        val buy = if (canSeeBuyingPrice) ShopLocale.toAsciiDigits(buyPriceInput).toDoubleOrNull() else 0.0
+                                        val sell = ShopLocale.toAsciiDigits(sellPriceInput).toDoubleOrNull()
                                         if (buy == null || sell == null || buy < 0.0 || sell < 0.0) {
                                             stepError = if (canSeeBuyingPrice) {
-                                                "Enter valid cost and selling prices"
+                                                if (currentLanguage == AppLanguage.BN) "সঠিক ক্রয় ও বিক্রয় মূল্য লিখুন" else "Enter valid cost and selling prices"
                                             } else {
-                                                "Enter a valid selling price"
+                                                if (currentLanguage == AppLanguage.BN) "সঠিক বিক্রয় মূল্য লিখুন" else "Enter a valid selling price"
                                             }
                                             return@Surface
                                         }
                                         if (!isSimpleMode) {
-                                            val wholesale = if (wholesalePriceInput.isBlank()) 0.0 else wholesalePriceInput.toDoubleOrNull()
-                                            val mrpVal = if (mrpInput.isBlank()) 0.0 else mrpInput.toDoubleOrNull()
-                                            val partyVal = if (partyRateInput.isBlank()) 0.0 else partyRateInput.toDoubleOrNull()
+                                            val wholesale = if (wholesalePriceInput.isBlank()) 0.0 else ShopLocale.toAsciiDigits(wholesalePriceInput).toDoubleOrNull()
+                                            val mrpVal = if (mrpInput.isBlank()) 0.0 else ShopLocale.toAsciiDigits(mrpInput).toDoubleOrNull()
+                                            val partyVal = if (partyRateInput.isBlank()) 0.0 else ShopLocale.toAsciiDigits(partyRateInput).toDoubleOrNull()
                                             if (wholesale == null || wholesale < 0.0 || mrpVal == null || mrpVal < 0.0 || partyVal == null || partyVal < 0.0) {
-                                                stepError = "Optional prices must be valid numbers"
+                                                stepError = if (currentLanguage == AppLanguage.BN) "ঐচ্ছিক মূল্য সঠিকভাবে লিখুন" else "Optional prices must be valid numbers"
                                                 return@Surface
                                             }
                                         }
@@ -2014,7 +2057,7 @@ fun AddProductWizardDialog(
                             ) {
                                 Box(contentAlignment = Alignment.Center) {
                                     Text(
-                                        text = "Next",
+                                        text = if (currentLanguage == AppLanguage.BN) "পরবর্তী" else "Next",
                                         color = Color(0xFF0A1406),
                                         fontSize = 15.sp,
                                         fontWeight = FontWeight.ExtraBold,
@@ -2028,31 +2071,31 @@ fun AddProductWizardDialog(
                             Surface(
                                 onClick = {
                                     if (!isBusy) {
-                                        val qtyParsed = stockInput.toDoubleOrNull()
-                                        val lowParsed = if (lowStockLimitInput.isBlank()) 5.0 else lowStockLimitInput.toDoubleOrNull()
+                                        val qtyParsed = ShopLocale.toAsciiDigits(stockInput).toDoubleOrNull()
+                                        val lowParsed = if (lowStockLimitInput.isBlank()) 5.0 else ShopLocale.toAsciiDigits(lowStockLimitInput).toDoubleOrNull()
                                         if (qtyParsed == null || qtyParsed < 0.0) {
-                                            stepError = "Stock cannot be negative"
+                                            stepError = if (currentLanguage == AppLanguage.BN) "স্টক নেতিবাচক হতে পারবে না" else "Stock cannot be negative"
                                             return@Surface
                                         }
                                         if (lowParsed == null || lowParsed < 0.0) {
-                                            stepError = "Low stock limit cannot be negative"
+                                            stepError = if (currentLanguage == AppLanguage.BN) "কম স্টক সীমা নেতিবাচক হতে পারবে না" else "Low stock limit cannot be negative"
                                             return@Surface
                                         }
-                                        val buy = buyPriceInput.toDoubleOrNull() ?: 0.0
-                                        val sell = sellPriceInput.toDoubleOrNull() ?: 0.0
+                                        val buy = ShopLocale.toAsciiDigits(buyPriceInput).toDoubleOrNull() ?: 0.0
+                                        val sell = ShopLocale.toAsciiDigits(sellPriceInput).toDoubleOrNull() ?: 0.0
                                         val qty = CalculationEngine.roundStock(qtyParsed)
                                         val lowLimit = CalculationEngine.roundStock(lowParsed)
-                                        val wholesale = wholesalePriceInput.toDoubleOrNull() ?: 0.0
-                                        val mrpVal = mrpInput.toDoubleOrNull() ?: 0.0
-                                        val partyVal = partyRateInput.toDoubleOrNull() ?: 0.0
+                                        val wholesale = ShopLocale.toAsciiDigits(wholesalePriceInput).toDoubleOrNull() ?: 0.0
+                                        val mrpVal = ShopLocale.toAsciiDigits(mrpInput).toDoubleOrNull() ?: 0.0
+                                        val partyVal = ShopLocale.toAsciiDigits(partyRateInput).toDoubleOrNull() ?: 0.0
                                         val resolvedBuyUnit = buyUnit.trim().ifBlank { selectedUnit }
                                         val resolvedBuyConv = if (resolvedBuyUnit.equals(selectedUnit, ignoreCase = true)) {
                                             1.0
                                         } else {
-                                            CalculationEngine.roundStock((buyConversionInput.toDoubleOrNull() ?: 1.0).coerceAtLeast(0.0001))
+                                            CalculationEngine.roundStock((ShopLocale.toAsciiDigits(buyConversionInput).toDoubleOrNull() ?: 1.0).coerceAtLeast(0.0001))
                                         }
                                         val resolvedSellUnits = sellUnitInputs.mapNotNull { (su, factorStr) ->
-                                            val f = factorStr.toDoubleOrNull()
+                                            val f = ShopLocale.toAsciiDigits(factorStr).toDoubleOrNull()
                                             if (su.isNotBlank() && !su.equals(selectedUnit, ignoreCase = true) && f != null && f > 0.0) {
                                                 su.trim() to CalculationEngine.roundStock(f)
                                             } else null
@@ -2144,7 +2187,12 @@ fun AddProductWizardDialog(
                                                 modifier = Modifier.size(if (isFatherMode) 20.dp else 18.dp)
                                             )
                                             Text(
-                                                text = if (isEditMode) "Save Changes" else "Save Product",
+                                                text = when {
+                                                    isEditMode && currentLanguage == AppLanguage.BN -> "পরিবর্তন সংরক্ষণ"
+                                                    isEditMode -> "Save Changes"
+                                                    currentLanguage == AppLanguage.BN -> "পণ্য সংরক্ষণ"
+                                                    else -> "Save Product"
+                                                },
                                                 color = Color(0xFF0A1406),
                                                 fontSize = if (isFatherMode) 16.5.sp else 15.sp,
                                                 fontWeight = FontWeight.ExtraBold,
@@ -2227,13 +2275,14 @@ fun AddProductWizardDialog(
 @Composable
 private fun WizardStepperHeader(
     currentStep: Int,
+    currentLanguage: AppLanguage,
     modifier: Modifier = Modifier
 ) {
-    val steps = listOf(
-        1 to "Basics",
-        2 to "Pricing",
-        3 to "Stock"
-    )
+    val steps = if (currentLanguage == AppLanguage.BN) {
+        listOf(1 to "মূল তথ্য", 2 to "মূল্য", 3 to "স্টক")
+    } else {
+        listOf(1 to "Basics", 2 to "Pricing", 3 to "Stock")
+    }
     Column(
         modifier = modifier,
         verticalArrangement = Arrangement.spacedBy(6.dp)

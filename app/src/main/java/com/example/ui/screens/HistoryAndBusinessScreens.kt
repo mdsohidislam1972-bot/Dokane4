@@ -241,6 +241,7 @@ fun HistoryScreen(
             currentLanguage = currentLanguage,
             members = members,
             ownerUid = store?.ownerId ?: "",
+            storeName = store?.name?.ifBlank { "StoreOS" } ?: "StoreOS",
             canSeeProfit = canSeeProfit,
             onBack = { storeViewModel.selectSaleDetail(null) }
         )
@@ -2051,14 +2052,20 @@ fun SaleDetailsScreen(
     currentLanguage: AppLanguage,
     members: List<com.example.data.model.StoreMember> = emptyList(),
     ownerUid: String = "",
+    storeName: String = "StoreOS",
     canSeeProfit: Boolean = true,
     onBack: () -> Unit
 ) {
     androidx.activity.compose.BackHandler(onBack = onBack)
 
     val dateFormat = remember { SimpleDateFormat("dd MMM yyyy, hh:mm a", Locale.US) }
-    val formattedDateTime = remember(sale.createdAt) {
-        sale.createdAt?.toDate()?.let { dateFormat.format(it) } ?: "Just now"
+    val formattedDateTime = remember(sale.createdAt, currentLanguage) {
+        val raw = sale.createdAt?.toDate()?.let { dateFormat.format(it) }
+        if (raw != null) {
+            ShopLocale.digits(raw, currentLanguage)
+        } else {
+            if (currentLanguage == AppLanguage.BN) "এইমাত্র" else "Just now"
+        }
     }
     val isBaki = sale.paymentType == "baki"
 
@@ -2127,11 +2134,14 @@ fun SaleDetailsScreen(
                                     maxLines = 1
                                 )
                                 Text(
-                                    text = sale.customerName.ifBlank { "Cash Sale" },
+                                    text = sale.customerName.ifBlank {
+                                        if (currentLanguage == AppLanguage.BN) "নগদ বিক্রয়" else "Cash Sale"
+                                    },
                                     color = TextPrimary,
                                     fontSize = 16.sp,
                                     fontWeight = FontWeight.Bold,
-                                    maxLines = 1
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
                                 )
                                 if (sale.customerPhone.isNotBlank()) {
                                     Text(
@@ -2148,12 +2158,17 @@ fun SaleDetailsScreen(
                                 color = if (isBaki) Color(0x33FFA000) else Color(0x265DD62C)
                             ) {
                                 Text(
-                                    text = if (isBaki) "Baki (Credit)" else "Paid (Cash)",
+                                    text = if (isBaki) {
+                                        if (currentLanguage == AppLanguage.BN) "বাকি" else "Baki (Credit)"
+                                    } else {
+                                        if (currentLanguage == AppLanguage.BN) "নগদ পরিশোধ" else "Paid (Cash)"
+                                    },
                                     color = if (isBaki) Color(0xFFFFB300) else VividGreen,
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.Bold,
                                     modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
-                                    maxLines = 1
+                                    maxLines = 1,
+                                    softWrap = false
                                 )
                             }
                         }
@@ -2171,7 +2186,11 @@ fun SaleDetailsScreen(
 
                         Spacer(modifier = Modifier.height(8.dp))
                         val staffMember = remember(sale.soldBy, members) { members.find { it.userId == sale.soldBy } }
-                        val creatorName = staffMember?.displayName ?: if (sale.soldBy == ownerUid && ownerUid.isNotBlank()) "Owner" else sale.soldBy.ifBlank { "Store Staff" }
+                        val creatorName = staffMember?.displayName ?: if (sale.soldBy == ownerUid && ownerUid.isNotBlank()) {
+                            if (currentLanguage == AppLanguage.BN) "মালিক" else "Owner"
+                        } else {
+                            sale.soldBy.ifBlank { if (currentLanguage == AppLanguage.BN) "দোকান কর্মী" else "Store Staff" }
+                        }
                         Text(
                             text = (if (currentLanguage == AppLanguage.BN) "তৈরি করেছেন: " else "Made by: ") + creatorName,
                             color = TextMuted,
@@ -2213,8 +2232,7 @@ fun SaleDetailsScreen(
                                         color = TextPrimary,
                                         fontSize = 14.sp,
                                         fontWeight = FontWeight.SemiBold,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
+                                        maxLines = 3
                                     )
                                     Text(
                                         text = "${ShopLocale.formatNumber(item.qty, currentLanguage)} ${ShopLocale.displayUnit(item.unit, currentLanguage)} × " + ShopLocale.formatMoney(item.sellPrice, currentLanguage),
@@ -2323,10 +2341,10 @@ fun SaleDetailsScreen(
             item {
                 val context = LocalContext.current
                 val clipboardManager = LocalClipboardManager.current
-                val completedReceipt = remember(sale) {
+                val completedReceipt = remember(sale, storeName) {
                     CompletedSaleReceipt(
                         invoiceNo = sale.invoiceNo,
-                        storeName = "StoreOS Dokan",
+                        storeName = storeName,
                         items = sale.items,
                         totalItems = sale.totalItems,
                         subtotal = sale.subtotal,
@@ -2352,7 +2370,8 @@ fun SaleDetailsScreen(
                                 putExtra(Intent.EXTRA_TEXT, shareText)
                                 type = "text/plain"
                             }
-                            val shareIntent = Intent.createChooser(sendIntent, "Share Receipt Via")
+                            val chooserTitle = if (currentLanguage == AppLanguage.BN) "রসিদ পাঠান" else "Share Receipt Via"
+                            val shareIntent = Intent.createChooser(sendIntent, chooserTitle)
                             context.startActivity(shareIntent)
                         },
                         modifier = Modifier
@@ -2369,12 +2388,15 @@ fun SaleDetailsScreen(
                             tint = Color.White,
                             modifier = Modifier.size(18.dp)
                         )
-                        Spacer(modifier = Modifier.width(8.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
                         Text(
                             text = if (currentLanguage == AppLanguage.BN) "রসিদ পাঠান" else "Share Receipt",
                             color = Color.White,
                             fontSize = 13.sp,
-                            fontWeight = FontWeight.Bold
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            softWrap = false,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
 
@@ -2398,12 +2420,15 @@ fun SaleDetailsScreen(
                             tint = TextPrimary,
                             modifier = Modifier.size(18.dp)
                         )
-                        Spacer(modifier = Modifier.width(8.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
                         Text(
                             text = if (currentLanguage == AppLanguage.BN) "কপি স্লিপ" else "Copy Slip",
                             color = TextPrimary,
                             fontSize = 13.sp,
-                            fontWeight = FontWeight.Bold
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            softWrap = false,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
                 }
@@ -2461,8 +2486,12 @@ fun CustomDateRangePickerDialog(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    val startText = selectedStartMillis?.let { displayDayFormat.format(Date(it)) } ?: "Start Day"
-                    val endText = selectedEndMillis?.let { displayDayFormat.format(Date(it)) } ?: "End Day"
+                    val startText = selectedStartMillis?.let {
+                        ShopLocale.digits(displayDayFormat.format(Date(it)), currentLanguage)
+                    } ?: if (currentLanguage == AppLanguage.BN) "শুরুর দিন" else "Start Day"
+                    val endText = selectedEndMillis?.let {
+                        ShopLocale.digits(displayDayFormat.format(Date(it)), currentLanguage)
+                    } ?: if (currentLanguage == AppLanguage.BN) "শেষ দিন" else "End Day"
                     Text(
                         text = "$startText  ➔  $endText",
                         color = VividGreen,
@@ -2489,13 +2518,13 @@ fun CustomDateRangePickerDialog(
                     }) {
                         Icon(
                             imageVector = Icons.Default.KeyboardArrowLeft,
-                            contentDescription = "Previous Month",
+                            contentDescription = if (currentLanguage == AppLanguage.BN) "আগের মাস" else "Previous Month",
                             tint = TextPrimary
                         )
                     }
 
                     Text(
-                        text = monthYearFormat.format(calendarMonth.time),
+                        text = ShopLocale.digits(monthYearFormat.format(calendarMonth.time), currentLanguage),
                         color = TextPrimary,
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Bold,
@@ -2511,7 +2540,7 @@ fun CustomDateRangePickerDialog(
                     }) {
                         Icon(
                             imageVector = Icons.Default.KeyboardArrowRight,
-                            contentDescription = "Next Month",
+                            contentDescription = if (currentLanguage == AppLanguage.BN) "পরের মাস" else "Next Month",
                             tint = TextPrimary
                         )
                     }
@@ -2520,7 +2549,11 @@ fun CustomDateRangePickerDialog(
                 Spacer(modifier = Modifier.height(6.dp))
 
                 // Days of week header
-                val dayNames = listOf("S", "M", "T", "W", "T", "F", "S")
+                val dayNames = if (currentLanguage == AppLanguage.BN) {
+                    listOf("র", "সো", "ম", "বু", "বৃ", "শু", "শ")
+                } else {
+                    listOf("S", "M", "T", "W", "T", "F", "S")
+                }
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceAround) {
                     dayNames.forEach { d ->
                         Text(
@@ -2600,10 +2633,11 @@ fun CustomDateRangePickerDialog(
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Text(
-                                        text = dayNumber.toString(),
+                                        text = ShopLocale.formatNumber(dayNumber.toLong(), currentLanguage),
                                         color = if (isStart || isEnd) DarkBackground else TextPrimary,
                                         fontSize = 12.sp,
-                                        fontWeight = if (isStart || isEnd || inRange) FontWeight.Bold else FontWeight.Normal
+                                        fontWeight = if (isStart || isEnd || inRange) FontWeight.Bold else FontWeight.Normal,
+                                        maxLines = 1
                                     )
                                 }
                             } else {
@@ -2721,12 +2755,17 @@ fun SaleReceiptCard(
                     color = if (isBaki) Color(0x33FFA000) else Color(0x265DD62C)
                 ) {
                     Text(
-                        text = if (isBaki) "BAKI (CREDIT)" else "CASH",
+                        text = if (isBaki) {
+                            if (currentLanguage == AppLanguage.BN) "বাকি" else "BAKI (CREDIT)"
+                        } else {
+                            if (currentLanguage == AppLanguage.BN) "নগদ" else "CASH"
+                        },
                         color = if (isBaki) Color(0xFFFFB300) else VividGreen,
                         fontSize = 10.sp,
                         fontWeight = FontWeight.Bold,
                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
-                        maxLines = 1
+                        maxLines = 1,
+                        softWrap = false
                     )
                 }
             }
@@ -2739,8 +2778,9 @@ fun SaleReceiptCard(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                val itemsSuffix = if (currentLanguage == AppLanguage.BN) "টি পণ্য" else "items"
                 Text(
-                    text = "${sale.customerName} • ${ShopLocale.formatNumber(sale.totalItems, currentLanguage)} items",
+                    text = "${sale.customerName} • ${ShopLocale.formatNumber(sale.totalItems, currentLanguage)} $itemsSuffix",
                     color = TextSecondary,
                     fontSize = 12.sp,
                     maxLines = 1,

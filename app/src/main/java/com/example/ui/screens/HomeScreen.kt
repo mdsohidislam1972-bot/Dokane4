@@ -7,9 +7,11 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -66,6 +68,7 @@ import com.example.ui.components.BackupPinDialogMode
 import com.example.ui.components.FatherLockInfoDialog
 import com.example.ui.components.FloatingGlassPillBottomBar
 import com.example.ui.components.GlassCard
+import com.example.ui.components.LeftSideGlassMenu
 import com.example.ui.components.NoPermissionScreen
 import com.example.ui.components.ShopNavTab
 import com.example.ui.components.VividButton
@@ -259,7 +262,7 @@ fun MainShopScreen(
     val alertCount = (if (canViewStock) lowStockProducts.size else 0) +
         (if (canAccessBaki) bakiOverview.debtorCount.toInt() else 0)
 
-    Box(
+    BoxWithConstraints(
         modifier = modifier
             .fillMaxSize()
             .background(Color(0xFF070907))
@@ -291,82 +294,11 @@ fun MainShopScreen(
                 }
             }
     ) {
-        Scaffold(
-            modifier = Modifier.fillMaxSize(),
-            containerColor = Color.Transparent,
-            topBar = {
-                ShopTopBar(
+        val isWideScreen = maxWidth >= 600.dp
+        Row(modifier = Modifier.fillMaxSize()) {
+            if (isWideScreen) {
+                LeftSideGlassMenu(
                     storeName = store?.name?.ifBlank { "StoreOS" } ?: "StoreOS",
-                    syncStatus = syncStatus,
-                    currentLanguage = currentLanguage,
-                    isSimpleMode = isSimpleMode,
-                    isFatherMode = isFatherMode,
-                    isPrivacyHidden = isPrivacyHidden,
-                    alertCount = alertCount,
-                    isMoreSelected = currentTab == ShopNavTab.MORE,
-                    onTogglePrivacy = { storeViewModel.togglePrivacyHidden() },
-                    onOpenNotifications = { activeDialog = HomeQuickDialog.NOTIFICATIONS },
-                    onOpenFatherLockInfo = { activeDialog = HomeQuickDialog.FATHER_LOCK_INFO },
-                    onOpenMore = {
-                        if (currentTab == ShopNavTab.MORE) {
-                            storeViewModel.resetMoreToRoot()
-                        } else {
-                            storeViewModel.setActiveSubNavTab(ShopNavTab.MORE)
-                            currentTab = ShopNavTab.MORE
-                        }
-                    },
-                    onOpenSettings = {
-                        if (isFatherMode) {
-                            storeViewModel.setSimpleMode(false)
-                        } else {
-                            showSettings = true
-                        }
-                    }
-                )
-            },
-            snackbarHost = {
-                SnackbarHost(
-                    hostState = snackbarHostState,
-                    modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 72.dp)
-                ) { data ->
-                    val toastShape = RoundedCornerShape(16.dp)
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(toastShape)
-                            .background(Color(0xF01C221D))
-                            .border(1.dp, VividGreen.copy(alpha = 0.45f), toastShape)
-                            .padding(horizontal = 16.dp, vertical = 12.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text(
-                            text = data.visuals.message,
-                            color = TextPrimary,
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Medium,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.weight(1f)
-                        )
-                        val actionLabel = data.visuals.actionLabel
-                        if (!actionLabel.isNullOrBlank()) {
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = actionLabel,
-                                color = VividGreen,
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier
-                                    .clickable { data.performAction() }
-                                    .padding(horizontal = 6.dp, vertical = 4.dp)
-                            )
-                        }
-                    }
-                }
-            },
-            bottomBar = {
-                FloatingGlassPillBottomBar(
                     currentTab = currentTab,
                     onTabSelected = { target ->
                         if (target == currentTab) {
@@ -379,6 +311,7 @@ fun MainShopScreen(
                         storeViewModel.setActiveSubNavTab(target)
                         currentTab = target
                     },
+                    onOpenSettings = if (isFatherMode) null else { { showSettings = true } },
                     canSell = canSell,
                     canViewStock = canViewStock,
                     canSeeHistory = canSeeHistory,
@@ -386,12 +319,116 @@ fun MainShopScreen(
                     isFatherMode = isFatherMode
                 )
             }
-        ) { innerPadding ->
-            Box(
+
+            Scaffold(
                 modifier = Modifier
-                    .fillMaxSize()
-                    .padding(innerPadding)
-            ) {
+                    .weight(1f)
+                    .fillMaxHeight(),
+                containerColor = Color.Transparent,
+                topBar = {
+                    ShopTopBar(
+                        storeName = store?.name?.ifBlank { "StoreOS" } ?: "StoreOS",
+                        syncStatus = syncStatus,
+                        currentLanguage = currentLanguage,
+                        isSimpleMode = isSimpleMode,
+                        isFatherMode = isFatherMode,
+                        isPrivacyHidden = isPrivacyHidden,
+                        alertCount = alertCount,
+                        isMoreSelected = currentTab == ShopNavTab.MORE,
+                        onTogglePrivacy = { storeViewModel.togglePrivacyHidden() },
+                        onOpenNotifications = { activeDialog = HomeQuickDialog.NOTIFICATIONS },
+                        onOpenFatherLockInfo = { activeDialog = HomeQuickDialog.FATHER_LOCK_INFO },
+                        onOpenMore = {
+                            if (currentTab == ShopNavTab.MORE) {
+                                storeViewModel.resetMoreToRoot()
+                            } else {
+                                storeViewModel.setActiveSubNavTab(ShopNavTab.MORE)
+                                currentTab = ShopNavTab.MORE
+                            }
+                        },
+                        onOpenSettings = {
+                            if (isFatherMode) {
+                                storeViewModel.setSimpleMode(false)
+                            } else {
+                                showSettings = true
+                            }
+                        }
+                    )
+                },
+                snackbarHost = {
+                    SnackbarHost(
+                        hostState = snackbarHostState,
+                        modifier = Modifier.padding(
+                            start = 16.dp,
+                            end = 16.dp,
+                            bottom = if (isWideScreen) 16.dp else 72.dp
+                        )
+                    ) { data ->
+                        val toastShape = RoundedCornerShape(16.dp)
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(toastShape)
+                                .background(Color(0xF01C221D))
+                                .border(1.dp, VividGreen.copy(alpha = 0.45f), toastShape)
+                                .padding(horizontal = 16.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                text = data.visuals.message,
+                                color = TextPrimary,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Medium,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f)
+                            )
+                            val actionLabel = data.visuals.actionLabel
+                            if (!actionLabel.isNullOrBlank()) {
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = actionLabel,
+                                    color = VividGreen,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier
+                                        .clickable { data.performAction() }
+                                        .padding(horizontal = 6.dp, vertical = 4.dp)
+                                )
+                            }
+                        }
+                    }
+                },
+                bottomBar = {
+                    if (!isWideScreen) {
+                        FloatingGlassPillBottomBar(
+                            currentTab = currentTab,
+                            onTabSelected = { target ->
+                                if (target == currentTab) {
+                                    when (target) {
+                                        ShopNavTab.MORE -> storeViewModel.resetMoreToRoot()
+                                        ShopNavTab.BUSINESS -> storeViewModel.resetBusinessToRoot()
+                                        else -> {}
+                                    }
+                                }
+                                storeViewModel.setActiveSubNavTab(target)
+                                currentTab = target
+                            },
+                            canSell = canSell,
+                            canViewStock = canViewStock,
+                            canSeeHistory = canSeeHistory,
+                            canViewReports = canViewReports,
+                            isFatherMode = isFatherMode
+                        )
+                    }
+                }
+            ) { innerPadding ->
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(innerPadding)
+                ) {
                 when (currentTab) {
                     ShopNavTab.HOME -> HomeDashboardContent(
                         storeViewModel = storeViewModel,
@@ -501,6 +538,7 @@ fun MainShopScreen(
                     )
                 }
             }
+        }
         }
     }
 
@@ -1178,6 +1216,9 @@ fun HomeDashboardContent(
             canViewReports = canViewReports,
             canAccessExpenses = canAccessExpenses,
             canSeeHistory = canSeeHistory,
+            canSell = canSell,
+            onNavigateToSell = onNavigateToSell,
+            onAddProduct = onAddProduct,
             onOpenSalesSummary = onNavigateToHistory,
             onOpenBaki = onOpenBaki,
             onOpenCashAndBank = onOpenCashAndBank,

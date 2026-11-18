@@ -28,7 +28,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -356,6 +359,7 @@ fun BusinessDashboardScreen(
     val isSimpleMode by storeViewModel.isSimpleMode.collectAsState()
     val isFatherMode by storeViewModel.isFatherMode.collectAsState()
 
+    val isOwner by storeViewModel.isOwner.collectAsState()
     val canSeeProfit by storeViewModel.canSeeBuyingPriceAndProfitFlow.collectAsState()
     val canBaki by storeViewModel.canAccessCustomersAndBakiFlow.collectAsState()
     val canSuppliers by storeViewModel.canAccessSuppliersAndPurchasesFlow.collectAsState()
@@ -377,6 +381,9 @@ fun BusinessDashboardScreen(
     val categoryStats by storeViewModel.salesByCategory.collectAsState()
     val slowSellers by storeViewModel.slowSellingProducts.collectAsState()
     val lowStockList by storeViewModel.lowStockProducts.collectAsState()
+    val healthProblems by storeViewModel.healthProblems.collectAsState()
+    val isScanningHealth by storeViewModel.isScanningHealth.collectAsState()
+    val lastHealthScanMillis by storeViewModel.lastHealthScanMillis.collectAsState()
 
     val activeExpenses = remember(periodExpenses) { periodExpenses.filter { !it.isDeleted } }
     val periodExpensesTotal = remember(activeExpenses) { activeExpenses.sumOf { it.amount } }
@@ -605,8 +612,13 @@ fun BusinessDashboardScreen(
                                     color = Color(0x2E5DD62C),
                                     border = BorderStroke(1.dp, VividGreen.copy(alpha = 0.45f))
                                 ) {
+                                    val marginLabel = if (currentLanguage == AppLanguage.BN) {
+                                        "▲ মার্জিন ${ShopLocale.formatPercent(marginPct, 1, currentLanguage)}"
+                                    } else {
+                                        "▲ margin ${ShopLocale.formatPercent(marginPct, 1, currentLanguage)}"
+                                    }
                                     Text(
-                                        text = "▲ ${String.format(Locale.US, "%.1f", marginPct)}%",
+                                        text = marginLabel,
                                         color = VividGreen,
                                         fontSize = 11.sp,
                                         lineHeight = 14.sp,
@@ -704,6 +716,9 @@ fun BusinessDashboardScreen(
         if (showCashBankSection || canSeeProfit || canBaki || showSuppliersSection) {
             item {
                 BusinessDarkGlassCard(
+                    onClick = if (showCashBankSection) {
+                        { storeViewModel.navigateInBusiness(BusinessNavDestination.CASH_BANK_SCREEN) }
+                    } else null,
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 16.dp)
@@ -724,15 +739,28 @@ fun BusinessDashboardScreen(
                                 maxLines = 1,
                                 softWrap = false
                             )
-                            Text(
-                                text = if (canSeeProfit) {
-                                    if (currentLanguage == AppLanguage.BN) "হিসাব সারসংক্ষেপ" else "Live position"
-                                } else "",
-                                color = TextMuted,
-                                fontSize = 10.5.sp,
-                                maxLines = 1,
-                                softWrap = false
-                            )
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Text(
+                                    text = if (canSeeProfit) {
+                                        if (currentLanguage == AppLanguage.BN) "হিসাব সারসংক্ষেপ" else "Live position"
+                                    } else "",
+                                    color = TextMuted,
+                                    fontSize = 10.5.sp,
+                                    maxLines = 1,
+                                    softWrap = false
+                                )
+                                if (showCashBankSection) {
+                                    Icon(
+                                        imageVector = Icons.Default.ChevronRight,
+                                        contentDescription = null,
+                                        tint = TextMuted,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                }
+                            }
                         }
 
                         if (showCashBankSection) {
@@ -802,12 +830,22 @@ fun BusinessDashboardScreen(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(2.dp)
                         ) {
+                            val countFormatted = ShopLocale.formatNumber(chartPoints.size.toLong(), currentLanguage)
+                            val chartUnitLabel = when {
+                                chartPoints.isEmpty() -> if (effectivePeriod == HistoryPeriod.YEAR || effectivePeriod == HistoryPeriod.ALL) {
+                                    if (currentLanguage == AppLanguage.BN) "মাসিক" else "Monthly"
+                                } else {
+                                    if (currentLanguage == AppLanguage.BN) "দৈনিক" else "Daily"
+                                }
+                                effectivePeriod == HistoryPeriod.YEAR || effectivePeriod == HistoryPeriod.ALL -> {
+                                    if (currentLanguage == AppLanguage.BN) "$countFormatted মাস" else "$countFormatted mo"
+                                }
+                                else -> {
+                                    if (currentLanguage == AppLanguage.BN) "$countFormatted দিন" else "$countFormatted days"
+                                }
+                            }
                             Text(
-                                text = when {
-                                    chartPoints.isEmpty() -> if (effectivePeriod == HistoryPeriod.YEAR || effectivePeriod == HistoryPeriod.ALL) "Monthly" else "Daily"
-                                    effectivePeriod == HistoryPeriod.YEAR || effectivePeriod == HistoryPeriod.ALL -> "${chartPoints.size} mo"
-                                    else -> "${chartPoints.size} days"
-                                },
+                                text = chartUnitLabel,
                                 color = TextSecondary,
                                 fontSize = 11.sp,
                                 maxLines = 1,
@@ -918,30 +956,17 @@ fun BusinessDashboardScreen(
                             .fillMaxHeight()
                             .testTag("sales_by_category_card")
                     ) {
-                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    text = if (currentLanguage == AppLanguage.BN) "ক্যাটেগরি" else "BY CATEGORY",
-                                    color = TextPrimary,
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    letterSpacing = 0.4.sp,
-                                    maxLines = 1,
-                                    softWrap = false,
-                                    overflow = TextOverflow.Ellipsis,
-                                    modifier = Modifier.weight(1f)
-                                )
-                                Icon(
-                                    imageVector = Icons.Default.ChevronRight,
-                                    contentDescription = null,
-                                    tint = TextMuted,
-                                    modifier = Modifier.size(14.dp)
-                                )
-                            }
+                            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Text(
+                                text = if (currentLanguage == AppLanguage.BN) "ক্যাটেগরি" else "BY CATEGORY",
+                                color = TextPrimary,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                letterSpacing = 0.4.sp,
+                                maxLines = 1,
+                                softWrap = false,
+                                overflow = TextOverflow.Ellipsis
+                            )
 
                             CategoryDonutChart(
                                 stats = categoryStats,
@@ -992,7 +1017,11 @@ fun BusinessDashboardScreen(
                             } else {
                                 "${lowStockList.size} item${if (lowStockList.size == 1) "" else "s"}"
                             },
-                            subtitle = if (hasLow) "At/below limit" else "Stock healthy",
+                            subtitle = if (hasLow) {
+                                if (currentLanguage == AppLanguage.BN) "সীমার নিচে" else "At/below limit"
+                            } else {
+                                if (currentLanguage == AppLanguage.BN) "মজুদ ঠিক আছে" else "Stock healthy"
+                            },
                             valueColor = if (hasLow) amberTint else VividGreen,
                             subtitleColor = TextSecondary,
                             isHighlightedAmber = hasLow,
@@ -1011,7 +1040,7 @@ fun BusinessDashboardScreen(
                                 } else {
                                     "${slowSellers.size} item${if (slowSellers.size == 1) "" else "s"}"
                                 },
-                                subtitle = "Zero sales",
+                                subtitle = if (currentLanguage == AppLanguage.BN) "বিক্রি নেই" else "Zero sales",
                                 valueColor = TextPrimary,
                                 subtitleColor = TextSecondary,
                                 isHighlightedAmber = false,
@@ -1021,6 +1050,126 @@ fun BusinessDashboardScreen(
                                     .weight(1f)
                                     .fillMaxHeight()
                             )
+                        }
+                    }
+                }
+            }
+        }
+
+        // 9. Data Health Check Banner (owner only, detailed mode)
+        if (isOwner && !isSimpleMode && !isFatherMode) {
+            item {
+                val hasIssues = healthProblems.isNotEmpty()
+                val healthShape = RoundedCornerShape(18.dp)
+                val borderColor = if (hasIssues) amberTint.copy(alpha = 0.55f) else VividGreen.copy(alpha = 0.45f)
+                val bgBrush = if (hasIssues) {
+                    Brush.horizontalGradient(listOf(Color(0xEB2E210C), Color(0xEE14120E)))
+                } else {
+                    Brush.horizontalGradient(listOf(Color(0xEB182B13), Color(0xEE101610)))
+                }
+                val subtitleText = when {
+                    isScanningHealth -> if (currentLanguage == AppLanguage.BN) "ডেটা যাচাই চলছে..." else "Scanning store records..."
+                    lastHealthScanMillis <= 0L -> if (currentLanguage == AppLanguage.BN) "সব হিসাব যাচাই করতে স্ক্যান করুন" else "Tap Scan to verify store records"
+                    hasIssues -> {
+                        val issueCount = ShopLocale.formatNumber(healthProblems.size.toLong(), currentLanguage)
+                        val ago = ShopLocale.formatTimeAgo(lastHealthScanMillis, currentLanguage)
+                        if (currentLanguage == AppLanguage.BN) "$issueCount টি অসঙ্গতি · $ago" else "$issueCount issue(s) found · $ago"
+                    }
+                    else -> {
+                        val ago = ShopLocale.formatTimeAgo(lastHealthScanMillis, currentLanguage)
+                        if (currentLanguage == AppLanguage.BN) "সব ঠিক আছে · $ago" else "All checks passed · $ago"
+                    }
+                }
+
+                Surface(
+                    onClick = { storeViewModel.navigateInBusiness(BusinessNavDestination.DATA_HEALTH_CHECK) },
+                    shape = healthShape,
+                    color = Color.Transparent,
+                    border = BorderStroke(1.dp, borderColor),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp)
+                        .clip(healthShape)
+                        .background(bgBrush)
+                        .testTag("business_health_check_banner")
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 14.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(34.dp)
+                                .clip(CircleShape)
+                                .background(if (hasIssues) amberTint.copy(alpha = 0.18f) else VividGreen.copy(alpha = 0.18f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = if (hasIssues) Icons.Default.Warning else Icons.Default.CheckCircle,
+                                contentDescription = null,
+                                tint = if (hasIssues) amberTint else VividGreen,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = if (currentLanguage == AppLanguage.BN) "ডেটা হেলথ চেক" else "Data Health Check",
+                                color = TextPrimary,
+                                fontSize = 13.5.sp,
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1,
+                                softWrap = false,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            Text(
+                                text = subtitleText,
+                                color = TextSecondary,
+                                fontSize = 11.5.sp,
+                                maxLines = 1,
+                                softWrap = false,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+
+                        Surface(
+                            onClick = {
+                                if (!isScanningHealth) {
+                                    storeViewModel.scanDataHealth()
+                                }
+                                storeViewModel.navigateInBusiness(BusinessNavDestination.DATA_HEALTH_CHECK)
+                            },
+                            shape = RoundedCornerShape(14.dp),
+                            color = Color(0x28FFFFFF),
+                            border = BorderStroke(1.dp, Color(0x36FFFFFF)),
+                            modifier = Modifier
+                                .defaultMinSize(minHeight = 34.dp)
+                                .testTag("business_health_scan_btn")
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                if (isScanningHealth) {
+                                    CircularProgressIndicator(
+                                        color = VividGreen,
+                                        strokeWidth = 2.dp,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                }
+                                Text(
+                                    text = if (currentLanguage == AppLanguage.BN) "স্ক্যান" else "Scan",
+                                    color = TextPrimary,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    maxLines = 1,
+                                    softWrap = false
+                                )
+                            }
                         }
                     }
                 }
@@ -1516,11 +1665,21 @@ fun LowStockScreen(
 ) {
     val currentLanguage by storeViewModel.currentLanguage.collectAsState()
     val lowStockList by storeViewModel.lowStockProducts.collectAsState()
+    val canSeeProfit by storeViewModel.canSeeBuyingPriceAndProfitFlow.collectAsState()
 
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(DarkBackground)
+            .background(Color(0xFF070907))
+            .drawBehind {
+                drawCircle(
+                    brush = Brush.radialGradient(
+                        colors = listOf(Color(0xFFFFB300).copy(alpha = 0.14f), Color.Transparent),
+                        center = Offset(size.width * 0.3f, size.height * 0.1f),
+                        radius = size.width * 0.85f
+                    )
+                )
+            }
     ) {
         Row(
             modifier = Modifier
@@ -1534,21 +1693,27 @@ fun LowStockScreen(
             ) {
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = "Back",
+                    contentDescription = if (currentLanguage == AppLanguage.BN) "পিছনে" else "Back",
                     tint = TextPrimary
                 )
             }
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = if (currentLanguage == AppLanguage.BN) "স্বল্প মজুদের পণ্য (Low Stock)" else "Low Stock Alert",
+                    text = if (currentLanguage == AppLanguage.BN) "স্বল্প মজুদের পণ্য" else "Low Stock Alert",
                     color = TextPrimary,
                     fontSize = 17.sp,
-                    fontWeight = FontWeight.Bold
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    softWrap = false,
+                    overflow = TextOverflow.Ellipsis
                 )
+                val countLabel = ShopLocale.formatNumber(lowStockList.size.toLong(), currentLanguage)
                 Text(
-                    text = if (currentLanguage == AppLanguage.BN) "${lowStockList.size}টি পণ্যের স্টক কম" else "${lowStockList.size} items at or below alert limit",
+                    text = if (currentLanguage == AppLanguage.BN) "$countLabel টি পণ্যের স্টক কম" else "$countLabel items at or below alert limit",
                     color = Color(0xFFFFB300),
-                    fontSize = 12.sp
+                    fontSize = 12.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
             }
         }
@@ -1559,41 +1724,47 @@ fun LowStockScreen(
             )
         } else {
             LazyColumn(
-                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 120.dp),
+                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 120.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 items(lowStockList, key = { it.id }) { product ->
-                    GlassCard(
-                        modifier = Modifier.fillMaxWidth(),
-                        testTag = "low_stock_item_${product.id}"
+                    BusinessDarkGlassCard(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("low_stock_item_${product.id}")
                     ) {
                         Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(14.dp),
+                            modifier = Modifier.fillMaxWidth(),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            Column(modifier = Modifier.weight(1f)) {
+                            Column(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .padding(end = 10.dp)
+                            ) {
                                 Text(
                                     text = if (currentLanguage == AppLanguage.BN && product.nameBn.isNotBlank()) product.nameBn else product.name,
                                     color = TextPrimary,
                                     fontSize = 15.sp,
                                     fontWeight = FontWeight.SemiBold,
                                     maxLines = 1,
-                                    softWrap = false
+                                    overflow = TextOverflow.Ellipsis
                                 )
                                 val unitLabel = ShopLocale.displayUnit(product.unit, currentLanguage)
+                                val catLabel = ShopLocale.displayCategory(product.category.ifBlank { "General" }, currentLanguage)
+                                val buyPrefix = if (currentLanguage == AppLanguage.BN) "কেনা: " else "Buy: "
+                                val sellPrefix = if (currentLanguage == AppLanguage.BN) "বিক্রি: " else "Sell: "
                                 Text(
-                                    text = if (storeViewModel.canSeeBuyingPriceAndProfitFlow.collectAsState().value) {
-                                        "${product.category.ifBlank { "General" }} • Buy: ${ShopLocale.formatMoney(product.buyPrice, currentLanguage)}/$unitLabel • Sell: ${ShopLocale.formatMoney(product.sellPrice, currentLanguage)}/$unitLabel"
+                                    text = if (canSeeProfit) {
+                                        "$catLabel • $buyPrefix${ShopLocale.formatMoney(product.buyPrice, currentLanguage)}/$unitLabel • $sellPrefix${ShopLocale.formatMoney(product.sellPrice, currentLanguage)}/$unitLabel"
                                     } else {
-                                        "${product.category.ifBlank { "General" }} • Sell: ${ShopLocale.formatMoney(product.sellPrice, currentLanguage)}/$unitLabel"
+                                        "$catLabel • $sellPrefix${ShopLocale.formatMoney(product.sellPrice, currentLanguage)}/$unitLabel"
                                     },
                                     color = TextSecondary,
                                     fontSize = 12.sp,
                                     maxLines = 1,
-                                    softWrap = false
+                                    overflow = TextOverflow.Ellipsis
                                 )
                             }
                             Column(horizontalAlignment = Alignment.End) {
@@ -1608,7 +1779,7 @@ fun LowStockScreen(
                                 )
                                 Text(
                                     text = if (currentLanguage == AppLanguage.BN) {
-                                        "সতর্কসীমা: ${ShopLocale.formatNumber(product.lowStockLimit, currentLanguage)} $unitLabel"
+                                        "সীমা: ${ShopLocale.formatNumber(product.lowStockLimit, currentLanguage)} $unitLabel"
                                     } else {
                                         "Limit: ${ShopLocale.formatNumber(product.lowStockLimit, currentLanguage)} $unitLabel"
                                     },
@@ -1633,13 +1804,21 @@ fun SlowSellersScreen(
 ) {
     val currentLanguage by storeViewModel.currentLanguage.collectAsState()
     val slowSellers by storeViewModel.slowSellingProducts.collectAsState()
-
     val canSeeProfit by storeViewModel.canSeeBuyingPriceAndProfitFlow.collectAsState()
 
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(DarkBackground)
+            .background(Color(0xFF070907))
+            .drawBehind {
+                drawCircle(
+                    brush = Brush.radialGradient(
+                        colors = listOf(Color(0xFFB388FF).copy(alpha = 0.14f), Color.Transparent),
+                        center = Offset(size.width * 0.3f, size.height * 0.1f),
+                        radius = size.width * 0.85f
+                    )
+                )
+            }
     ) {
         Row(
             modifier = Modifier
@@ -1653,21 +1832,27 @@ fun SlowSellersScreen(
             ) {
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = "Back",
+                    contentDescription = if (currentLanguage == AppLanguage.BN) "পিছনে" else "Back",
                     tint = TextPrimary
                 )
             }
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = if (currentLanguage == AppLanguage.BN) "অচল পণ্য (Slow-Selling)" else "Slow-Selling Products",
+                    text = if (currentLanguage == AppLanguage.BN) "অচল পণ্য" else "Slow-Selling Products",
                     color = TextPrimary,
                     fontSize = 17.sp,
-                    fontWeight = FontWeight.Bold
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    softWrap = false,
+                    overflow = TextOverflow.Ellipsis
                 )
+                val countLabel = ShopLocale.formatNumber(slowSellers.size.toLong(), currentLanguage)
                 Text(
-                    text = if (currentLanguage == AppLanguage.BN) "${slowSellers.size}টি পণ্যে এই সময়ে কোনো বিক্রি হয়নি" else "${slowSellers.size} items in stock with zero sales in this period",
+                    text = if (currentLanguage == AppLanguage.BN) "$countLabel টি পণ্যে এই সময়ে বিক্রি হয়নি" else "$countLabel items in stock with zero sales in this period",
                     color = Color(0xFFB388FF),
-                    fontSize = 12.sp
+                    fontSize = 12.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
             }
         }
@@ -1678,42 +1863,48 @@ fun SlowSellersScreen(
             )
         } else {
             LazyColumn(
-                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 120.dp),
+                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 120.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 items(slowSellers, key = { it.id }) { product ->
                     val lockedCapital = product.stock * product.buyPrice
-                    GlassCard(
-                        modifier = Modifier.fillMaxWidth(),
-                        testTag = "slow_seller_item_${product.id}"
+                    BusinessDarkGlassCard(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("slow_seller_item_${product.id}")
                     ) {
                         Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(14.dp),
+                            modifier = Modifier.fillMaxWidth(),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            Column(modifier = Modifier.weight(1f)) {
+                            Column(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .padding(end = 10.dp)
+                            ) {
                                 Text(
                                     text = if (currentLanguage == AppLanguage.BN && product.nameBn.isNotBlank()) product.nameBn else product.name,
                                     color = TextPrimary,
                                     fontSize = 15.sp,
                                     fontWeight = FontWeight.SemiBold,
                                     maxLines = 1,
-                                    softWrap = false
+                                    overflow = TextOverflow.Ellipsis
                                 )
                                 val unitLabel = ShopLocale.displayUnit(product.unit, currentLanguage)
+                                val stockPrefix = if (currentLanguage == AppLanguage.BN) "মজুদ: " else "Stock: "
+                                val buyPrefix = if (currentLanguage == AppLanguage.BN) "কেনা: " else "Buy: "
+                                val sellPrefix = if (currentLanguage == AppLanguage.BN) "বিক্রি: " else "Sell: "
                                 Text(
                                     text = if (canSeeProfit) {
-                                        "Stock: ${ShopLocale.formatNumber(product.stock, currentLanguage)} $unitLabel • Buy: ${ShopLocale.formatMoney(product.buyPrice, currentLanguage)}/$unitLabel"
+                                        "$stockPrefix${ShopLocale.formatNumber(product.stock, currentLanguage)} $unitLabel • $buyPrefix${ShopLocale.formatMoney(product.buyPrice, currentLanguage)}/$unitLabel"
                                     } else {
-                                        "Stock: ${ShopLocale.formatNumber(product.stock, currentLanguage)} $unitLabel • Sell: ${ShopLocale.formatMoney(product.sellPrice, currentLanguage)}/$unitLabel"
+                                        "$stockPrefix${ShopLocale.formatNumber(product.stock, currentLanguage)} $unitLabel • $sellPrefix${ShopLocale.formatMoney(product.sellPrice, currentLanguage)}/$unitLabel"
                                     },
                                     color = TextSecondary,
                                     fontSize = 12.sp,
                                     maxLines = 1,
-                                    softWrap = false
+                                    overflow = TextOverflow.Ellipsis
                                 )
                             }
                             if (canSeeProfit) {
@@ -1722,12 +1913,16 @@ fun SlowSellersScreen(
                                         text = ShopLocale.formatMoney(lockedCapital, currentLanguage),
                                         color = Color(0xFFB388FF),
                                         fontSize = 15.sp,
-                                        fontWeight = FontWeight.Bold
+                                        fontWeight = FontWeight.Bold,
+                                        maxLines = 1,
+                                        softWrap = false
                                     )
                                     Text(
                                         text = if (currentLanguage == AppLanguage.BN) "আটকা মূলধন" else "Tied-Up Capital",
                                         color = TextMuted,
-                                        fontSize = 11.sp
+                                        fontSize = 11.sp,
+                                        maxLines = 1,
+                                        softWrap = false
                                     )
                                 }
                             }

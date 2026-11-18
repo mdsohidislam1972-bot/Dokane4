@@ -54,22 +54,25 @@ fun GlassCard(
     modifier: Modifier = Modifier,
     onClick: (() -> Unit)? = null,
     testTag: String? = null,
+    cornerRadius: androidx.compose.ui.unit.Dp = 24.dp,
+    borderColor: Color? = null,
+    contentPadding: PaddingValues = PaddingValues(20.dp),
     content: @Composable () -> Unit
 ) {
-    val shape = RoundedCornerShape(28.dp)
+    val shape = RoundedCornerShape(cornerRadius)
     var boxModifier = modifier
         .shadow(
-            elevation = 8.dp,
+            elevation = 10.dp,
             shape = shape,
-            ambientColor = Color(0x66000000),
-            spotColor = Color(0x33000000)
+            ambientColor = Color(0x77000000),
+            spotColor = Color(0x44000000)
         )
         .clip(shape)
         .background(
             brush = Brush.verticalGradient(
                 colors = listOf(
-                    Color(0xFF262626),
-                    Color(0xFF1E1E1E)
+                    Color(0xF0232723),
+                    Color(0xF2151815)
                 )
             )
         )
@@ -82,13 +85,74 @@ fun GlassCard(
         boxModifier = boxModifier.clickable(onClick = onClick)
     }
 
+    val border = if (borderColor != null) {
+        BorderStroke(1.1.dp, borderColor)
+    } else {
+        BorderStroke(
+            width = 1.dp,
+            brush = Brush.verticalGradient(
+                colors = listOf(Color(0x3BFFFFFF), Color(0x10FFFFFF))
+            )
+        )
+    }
+
     Surface(
         modifier = boxModifier,
         shape = shape,
         color = Color.Transparent,
-        border = BorderStroke(1.dp, GlassBorder)
+        border = border
     ) {
-        Box(modifier = Modifier.padding(20.dp)) {
+        Box(modifier = Modifier.padding(contentPadding)) {
+            content()
+        }
+    }
+}
+
+@Composable
+fun HeroGlowGlassCard(
+    modifier: Modifier = Modifier,
+    onClick: (() -> Unit)? = null,
+    testTag: String? = null,
+    cornerRadius: androidx.compose.ui.unit.Dp = 24.dp,
+    glowColor: Color = VividGreen,
+    contentPadding: PaddingValues = PaddingValues(18.dp),
+    content: @Composable () -> Unit
+) {
+    val shape = RoundedCornerShape(cornerRadius)
+    var cardMod = modifier
+        .shadow(
+            elevation = 16.dp,
+            shape = shape,
+            ambientColor = glowColor.copy(alpha = 0.25f),
+            spotColor = glowColor.copy(alpha = 0.35f)
+        )
+        .clip(shape)
+        .background(
+            brush = Brush.verticalGradient(
+                colors = listOf(
+                    Color(0xF51A2A15),
+                    Color(0xF70E140C)
+                )
+            )
+        )
+    if (testTag != null) cardMod = cardMod.testTag(testTag)
+    if (onClick != null) cardMod = cardMod.clickable(onClick = onClick)
+
+    Surface(
+        modifier = cardMod,
+        shape = shape,
+        color = Color.Transparent,
+        border = BorderStroke(
+            width = 1.25.dp,
+            brush = Brush.verticalGradient(
+                colors = listOf(
+                    glowColor.copy(alpha = 0.90f),
+                    glowColor.copy(alpha = 0.35f)
+                )
+            )
+        )
+    ) {
+        Box(modifier = Modifier.padding(contentPadding)) {
             content()
         }
     }

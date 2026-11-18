@@ -49,6 +49,7 @@ import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material.icons.filled.Plumbing
 import androidx.compose.material.icons.filled.PointOfSale
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.ShoppingBasket
 import androidx.compose.material.icons.filled.Spa
 import androidx.compose.material3.Icon
@@ -112,6 +113,7 @@ fun FloatingGlassPillBottomBar(
     canViewReports: Boolean = true,
     isFatherMode: Boolean = false
 ) {
+    val currentLanguage = LocalAppLanguage.current
     val leftCount = 1 + (if (canViewStock) 1 else 0)
     val rightCount = (if (canSeeHistory) 1 else 0) + (if (canViewReports) 1 else 0)
     val barHeight = if (isFatherMode) 76.dp else 66.dp
@@ -141,7 +143,7 @@ fun FloatingGlassPillBottomBar(
             border = BorderStroke(
                 width = 1.dp,
                 brush = Brush.verticalGradient(
-                    colors = listOf(Color(0x38FFFFFF), Color(0x14FFFFFF))
+                    colors = listOf(Color(0x3DFFFFFF), Color(0x14FFFFFF))
                 )
             )
         ) {
@@ -165,7 +167,7 @@ fun FloatingGlassPillBottomBar(
                     horizontalArrangement = Arrangement.SpaceEvenly
                 ) {
                     PillNavItem(
-                        label = "Home",
+                        label = ShopLocale.get("nav_home", currentLanguage),
                         icon = Icons.Default.Home,
                         isSelected = currentTab == ShopNavTab.HOME,
                         onClick = { onTabSelected(ShopNavTab.HOME) },
@@ -176,7 +178,7 @@ fun FloatingGlassPillBottomBar(
 
                     if (canViewStock) {
                         PillNavItem(
-                            label = "Stock",
+                            label = ShopLocale.get("nav_stock", currentLanguage),
                             icon = Icons.Default.Inventory2,
                             isSelected = currentTab == ShopNavTab.STOCK,
                             onClick = { onTabSelected(ShopNavTab.STOCK) },
@@ -200,7 +202,7 @@ fun FloatingGlassPillBottomBar(
                     ) {
                         if (canSeeHistory) {
                             PillNavItem(
-                                label = "History",
+                                label = ShopLocale.get("nav_history", currentLanguage),
                                 icon = Icons.Default.History,
                                 isSelected = currentTab == ShopNavTab.HISTORY,
                                 onClick = { onTabSelected(ShopNavTab.HISTORY) },
@@ -212,7 +214,7 @@ fun FloatingGlassPillBottomBar(
 
                         if (canViewReports) {
                             PillNavItem(
-                                label = "Business",
+                                label = ShopLocale.get("nav_business", currentLanguage),
                                 icon = Icons.Default.Business,
                                 isSelected = currentTab == ShopNavTab.BUSINESS,
                                 onClick = { onTabSelected(ShopNavTab.BUSINESS) },
@@ -280,7 +282,7 @@ fun FloatingGlassPillBottomBar(
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
-                            text = "SELL",
+                            text = ShopLocale.get("nav_sell", currentLanguage),
                             color = Color(0xFF0A1406),
                             fontSize = orbFontSize,
                             fontWeight = FontWeight.Black,
@@ -290,6 +292,242 @@ fun FloatingGlassPillBottomBar(
                         )
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+fun LeftSideGlassMenu(
+    storeName: String,
+    currentTab: ShopNavTab,
+    onTabSelected: (ShopNavTab) -> Unit,
+    onOpenSettings: (() -> Unit)? = null,
+    canSell: Boolean = true,
+    canViewStock: Boolean = true,
+    canSeeHistory: Boolean = true,
+    canViewReports: Boolean = true,
+    isFatherMode: Boolean = false,
+    modifier: Modifier = Modifier
+) {
+    val currentLanguage = LocalAppLanguage.current
+    Surface(
+        modifier = modifier
+            .width(216.dp)
+            .fillMaxHeight()
+            .padding(start = 12.dp, top = 12.dp, bottom = 12.dp),
+        shape = RoundedCornerShape(28.dp),
+        color = Color.Transparent,
+        border = BorderStroke(
+            width = 1.dp,
+            brush = Brush.verticalGradient(
+                colors = listOf(Color(0x38FFFFFF), Color(0x14FFFFFF))
+            )
+        )
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    brush = Brush.verticalGradient(
+                        colors = listOf(Color(0xF51B1F1B), Color(0xF7111311))
+                    )
+                )
+                .padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 4.dp, vertical = 6.dp)
+            ) {
+                Surface(
+                    shape = CircleShape,
+                    color = Color(0xFF1D3218),
+                    border = BorderStroke(1.dp, VividGreen.copy(alpha = 0.45f)),
+                    modifier = Modifier.size(34.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = Icons.Default.Home,
+                            contentDescription = storeName,
+                            tint = VividGreen,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.width(10.dp))
+                Text(
+                    text = storeName.ifBlank { "StoreOS" },
+                    color = TextPrimary,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    softWrap = false,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+
+            if (canSell) {
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp)
+                        .shadow(
+                            elevation = 12.dp,
+                            shape = RoundedCornerShape(24.dp),
+                            spotColor = VividGreen,
+                            ambientColor = VividGreen
+                        )
+                        .clip(RoundedCornerShape(24.dp))
+                        .clickable { onTabSelected(ShopNavTab.SELL) }
+                        .testTag("nav_sell_fab"),
+                    shape = RoundedCornerShape(24.dp),
+                    color = Color.Transparent,
+                    border = BorderStroke(1.dp, Color(0x66FFFFFF))
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(
+                                brush = Brush.horizontalGradient(
+                                    colors = listOf(Color(0xFF79F244), VividGreen, Color(0xFF42A81D))
+                                )
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.PointOfSale,
+                                contentDescription = null,
+                                tint = Color(0xFF0A1406),
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Text(
+                                text = ShopLocale.get("nav_sell", currentLanguage),
+                                color = Color(0xFF0A1406),
+                                fontSize = if (isFatherMode) 16.sp else 14.sp,
+                                fontWeight = FontWeight.Black,
+                                maxLines = 1,
+                                softWrap = false
+                            )
+                        }
+                    }
+                }
+                Spacer(modifier = Modifier.height(4.dp))
+            }
+
+            SideMenuNavRow(
+                label = ShopLocale.get("nav_home", currentLanguage),
+                icon = Icons.Default.Home,
+                isSelected = currentTab == ShopNavTab.HOME,
+                onClick = { onTabSelected(ShopNavTab.HOME) },
+                testTag = "nav_home"
+            )
+            if (canViewStock) {
+                SideMenuNavRow(
+                    label = ShopLocale.get("nav_stock", currentLanguage),
+                    icon = Icons.Default.Inventory2,
+                    isSelected = currentTab == ShopNavTab.STOCK,
+                    onClick = { onTabSelected(ShopNavTab.STOCK) },
+                    testTag = "nav_stock"
+                )
+            }
+            if (canSeeHistory) {
+                SideMenuNavRow(
+                    label = ShopLocale.get("nav_history", currentLanguage),
+                    icon = Icons.Default.History,
+                    isSelected = currentTab == ShopNavTab.HISTORY,
+                    onClick = { onTabSelected(ShopNavTab.HISTORY) },
+                    testTag = "nav_history"
+                )
+            }
+            if (canViewReports) {
+                SideMenuNavRow(
+                    label = ShopLocale.get("nav_business", currentLanguage),
+                    icon = Icons.Default.Business,
+                    isSelected = currentTab == ShopNavTab.BUSINESS,
+                    onClick = { onTabSelected(ShopNavTab.BUSINESS) },
+                    testTag = "nav_business"
+                )
+            }
+            SideMenuNavRow(
+                label = ShopLocale.get("nav_more", currentLanguage),
+                icon = Icons.Default.MoreHoriz,
+                isSelected = currentTab == ShopNavTab.MORE,
+                onClick = { onTabSelected(ShopNavTab.MORE) },
+                testTag = "nav_more"
+            )
+
+            Spacer(modifier = Modifier.weight(1f))
+
+            if (onOpenSettings != null) {
+                SideMenuNavRow(
+                    label = ShopLocale.get("settings_title", currentLanguage),
+                    icon = Icons.Default.Settings,
+                    isSelected = false,
+                    onClick = onOpenSettings,
+                    testTag = "side_nav_settings_btn"
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SideMenuNavRow(
+    label: String,
+    icon: ImageVector,
+    isSelected: Boolean,
+    onClick: () -> Unit,
+    testTag: String
+) {
+    val shape = RoundedCornerShape(16.dp)
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(48.dp)
+            .clip(shape)
+            .clickable(onClick = onClick)
+            .testTag(testTag),
+        shape = shape,
+        color = if (isSelected) Color(0x285DD62C) else Color.Transparent,
+        border = if (isSelected) BorderStroke(1.dp, VividGreen.copy(alpha = 0.55f)) else null
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = label,
+                tint = if (isSelected) VividGreen else TextSecondary,
+                modifier = Modifier.size(20.dp)
+            )
+            Text(
+                text = label,
+                color = if (isSelected) TextPrimary else TextSecondary,
+                fontSize = 14.sp,
+                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                maxLines = 1,
+                softWrap = false,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f)
+            )
+            if (isSelected) {
+                Box(
+                    modifier = Modifier
+                        .size(6.dp)
+                        .clip(CircleShape)
+                        .background(VividGreen)
+                )
             }
         }
     }

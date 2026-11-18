@@ -949,6 +949,9 @@ fun DetailedHomeLayout(
     canViewReports: Boolean,
     canAccessExpenses: Boolean,
     canSeeHistory: Boolean,
+    canSell: Boolean = true,
+    onNavigateToSell: () -> Unit = {},
+    onAddProduct: () -> Unit = {},
     onOpenSalesSummary: () -> Unit,
     onOpenBaki: () -> Unit,
     onOpenCashAndBank: () -> Unit,
@@ -975,9 +978,99 @@ fun DetailedHomeLayout(
         modifier = Modifier
             .fillMaxSize()
             .testTag("home_dashboard_list"),
-        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 122.dp),
+        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 132.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
+        // 0. Top Quick Action Strip: Big Sell Button + Smaller Add Product Button
+        if (canSell || canAddEditProducts) {
+            item(key = "detailed_top_sell_add_row") {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("home_top_actions_row"),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    if (canSell) {
+                        Surface(
+                            shape = RoundedCornerShape(18.dp),
+                            color = Color.Transparent,
+                            border = BorderStroke(1.2.dp, VividGreen.copy(alpha = 0.85f)),
+                            modifier = Modifier
+                                .weight(1.45f)
+                                .height(54.dp)
+                                .clip(RoundedCornerShape(18.dp))
+                                .background(
+                                    brush = Brush.horizontalGradient(
+                                        colors = listOf(Color(0xFF77EE42), VividGreen, Color(0xFF3E9C1A))
+                                    )
+                                )
+                                .clickable(onClick = onNavigateToSell)
+                                .testTag("home_new_sale_btn")
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(horizontal = 16.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.ShoppingBag,
+                                    contentDescription = null,
+                                    tint = Color(0xFF0A1406),
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = if (currentLanguage == AppLanguage.BN) "নতুন বিক্রি" else "Sell",
+                                    color = Color(0xFF0A1406),
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.Black,
+                                    maxLines = 1,
+                                    softWrap = false,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                        }
+                    }
+
+                    if (canAddEditProducts) {
+                        BentoGlassCard(
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(54.dp),
+                            onClick = onAddProduct,
+                            testTag = "home_add_product_btn",
+                            padding = PaddingValues(horizontal = 12.dp, vertical = 10.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxSize(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.AddBox,
+                                    contentDescription = null,
+                                    tint = VividGreen,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = ShopLocale.get("add_product", currentLanguage),
+                                    color = TextPrimary,
+                                    fontSize = 13.5.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    maxLines = 1,
+                                    softWrap = false,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
         // 1. Hero TODAY glowing card (NO Profile 60%, NO % vs expecting; real % vs yesterday only when yesterdaySales > 0)
         if (canSeeSalesSummary) {
             item(key = "detailed_hero_today") {
@@ -1269,22 +1362,52 @@ fun DetailedHomeLayout(
             }
         }
 
-        // 5. 5 Circular Quick Actions Row (permission-filtered, real actions only)
+        // 5. 5 Circular Quick Actions Row (permission-filtered, localized EN & BN, real actions only)
         val quickActions = buildList {
             if (canReceivePayment || canAccessBaki) {
-                add(Triple("Payment In", Icons.Default.CurrencyExchange, onQuickPaymentIn))
+                add(
+                    Triple(
+                        if (currentLanguage == AppLanguage.BN) "টাকা জমা" else "Payment In",
+                        Icons.Default.CurrencyExchange,
+                        onQuickPaymentIn
+                    ) to "payment_in"
+                )
             }
             if (canPaySupplier || canAccessSuppliers) {
-                add(Triple("Payment Out", Icons.Default.SwapHoriz, onQuickPaymentOut))
+                add(
+                    Triple(
+                        if (currentLanguage == AppLanguage.BN) "পরিশোধ" else "Payment Out",
+                        Icons.Default.SwapHoriz,
+                        onQuickPaymentOut
+                    ) to "payment_out"
+                )
             }
             if (canAccessSuppliers) {
-                add(Triple("Purchase", Icons.Default.ShoppingCart, onQuickPurchase))
+                add(
+                    Triple(
+                        if (currentLanguage == AppLanguage.BN) "ক্রয়" else "Purchase",
+                        Icons.Default.ShoppingCart,
+                        onQuickPurchase
+                    ) to "purchase"
+                )
             }
             if (canAccessExpenses) {
-                add(Triple("Expense", Icons.Default.AttachMoney, onQuickExpense))
+                add(
+                    Triple(
+                        if (currentLanguage == AppLanguage.BN) "খরচ" else "Expense",
+                        Icons.Default.AttachMoney,
+                        onQuickExpense
+                    ) to "expense"
+                )
             }
             if (canAccessBaki || canAccessSuppliers) {
-                add(Triple("Add Party", Icons.Default.PersonAdd, onQuickAddParty))
+                add(
+                    Triple(
+                        if (currentLanguage == AppLanguage.BN) "পার্টি যোগ" else "Add Party",
+                        Icons.Default.PersonAdd,
+                        onQuickAddParty
+                    ) to "add_party"
+                )
             }
         }
 
@@ -1296,13 +1419,14 @@ fun DetailedHomeLayout(
                         .padding(vertical = 4.dp),
                     horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    quickActions.forEach { (label, icon, action) ->
+                    quickActions.forEach { (triple, tagKey) ->
+                        val (label, icon, action) = triple
                         QuickActionCircleButton(
                             label = label,
                             icon = icon,
                             onClick = action,
                             modifier = Modifier.weight(1f),
-                            testTag = "home_qa_${label.lowercase().replace(' ', '_')}"
+                            testTag = "home_qa_$tagKey"
                         )
                     }
                 }
@@ -1355,8 +1479,13 @@ fun DetailedHomeLayout(
                             )
                         } else {
                             recentSales.take(4).forEachIndexed { index, sale ->
-                                val displayName = sale.customerName.ifBlank { "Cash Sale" }
-                                val initial = displayName.trim().firstOrNull()?.uppercaseChar()?.toString() ?: "C"
+                                val rawName = sale.customerName.trim()
+                                val displayName = if (rawName.isBlank() || rawName.equals("Cash Sale", ignoreCase = true)) {
+                                    if (currentLanguage == AppLanguage.BN) "নগদ বিক্রি" else "Cash Sale"
+                                } else {
+                                    rawName
+                                }
+                                val initial = displayName.firstOrNull()?.uppercaseChar()?.toString() ?: "C"
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
@@ -1526,10 +1655,10 @@ private fun DetailedTodayHeroCard(
                         .padding(horizontal = 16.dp, vertical = 14.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    // Top chips row: TODAY + optional real % vs yesterday (never fabricated!)
+                    // Top chip: TODAY (no "% vs yesterday" fake comparison chip)
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
+                        horizontalArrangement = Arrangement.Start,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Surface(
@@ -1546,32 +1675,6 @@ private fun DetailedTodayHeroCard(
                                 softWrap = false,
                                 modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
                             )
-                        }
-
-                        val pct = homeInsights.salesChangePercent
-                        if (pct != null) {
-                            val isUp = pct >= 0.0
-                            val arrow = if (isUp) "▲" else "▼"
-                            val roundedPct = abs(pct).roundToInt()
-                            Surface(
-                                shape = RoundedCornerShape(12.dp),
-                                color = Color(0x281D2B18),
-                                border = BorderStroke(
-                                    1.dp,
-                                    if (isUp) Color(0x455DD62C) else Color(0x45E53935)
-                                ),
-                                modifier = Modifier.testTag("home_vs_yesterday_chip")
-                            ) {
-                                Text(
-                                    text = "$arrow $roundedPct% vs yesterday",
-                                    color = if (isUp) VividGreen else AlertRed,
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    maxLines = 1,
-                                    softWrap = false,
-                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
-                                )
-                            }
                         }
                     }
 
@@ -1783,7 +1886,12 @@ private fun DetailedLowStockCard(
                                     color = badgeColor.copy(alpha = 0.22f)
                                 ) {
                                     Text(
-                                        text = if (isOut) "Out" else "Low",
+                                        text = when {
+                                            isOut && currentLanguage == AppLanguage.BN -> "শেষ"
+                                            isOut -> "Out"
+                                            currentLanguage == AppLanguage.BN -> "কম"
+                                            else -> "Low"
+                                        },
                                         color = badgeColor,
                                         fontSize = 10.sp,
                                         fontWeight = FontWeight.Bold,
@@ -1899,7 +2007,7 @@ private fun DetailedSevenDayCashflowCard(
                         )
                         Spacer(modifier = Modifier.width(5.dp))
                         Text(
-                            text = "In",
+                            text = if (currentLanguage == AppLanguage.BN) "আয়" else "In",
                             color = VividGreen,
                             fontSize = 11.5.sp,
                             fontWeight = FontWeight.Medium,
@@ -1926,7 +2034,7 @@ private fun DetailedSevenDayCashflowCard(
                         )
                         Spacer(modifier = Modifier.width(5.dp))
                         Text(
-                            text = "Out",
+                            text = if (currentLanguage == AppLanguage.BN) "ব্যয়" else "Out",
                             color = TextSecondary,
                             fontSize = 11.5.sp,
                             fontWeight = FontWeight.Medium,

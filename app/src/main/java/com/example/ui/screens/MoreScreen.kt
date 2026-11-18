@@ -42,6 +42,7 @@ import androidx.compose.material.icons.outlined.Book
 import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.Category
 import androidx.compose.material.icons.outlined.CheckCircle
+import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.HealthAndSafety
 import androidx.compose.material.icons.outlined.Inventory2
@@ -49,6 +50,7 @@ import androidx.compose.material.icons.outlined.LockOpen
 import androidx.compose.material.icons.outlined.People
 import androidx.compose.material.icons.outlined.Percent
 import androidx.compose.material.icons.outlined.PersonAdd
+import androidx.compose.material.icons.outlined.RestoreFromTrash
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.ShoppingBag
 import androidx.compose.material.icons.outlined.ShoppingCart
@@ -116,6 +118,7 @@ private sealed interface MoreTileAction {
     data object OpenPaymentOut : MoreTileAction
     data object OpenRecordPurchase : MoreTileAction
     data object OpenAddParty : MoreTileAction
+    data object OpenProductBin : MoreTileAction
     data object OpenSettings : MoreTileAction
     data object ExitFatherMode : MoreTileAction
     data object LogOut : MoreTileAction
@@ -126,7 +129,8 @@ private enum class MoreQuickModal {
     PAYMENT_IN,
     PAYMENT_OUT,
     RECORD_PURCHASE,
-    ADD_PARTY
+    ADD_PARTY,
+    PRODUCT_BIN
 }
 
 private data class MoreMenuEntry(
@@ -202,6 +206,7 @@ fun MoreMenuContent(
     val isSimpleMode by storeViewModel.isSimpleMode.collectAsState()
     val isFatherMode by storeViewModel.isFatherMode.collectAsState()
     val hasOwnerPin by storeViewModel.hasOwnerPin.collectAsState()
+    val productBin by storeViewModel.productBin.collectAsState()
 
     var searchQuery by rememberSaveable { mutableStateOf("") }
     var activeModal by remember { mutableStateOf(MoreQuickModal.NONE) }
@@ -215,6 +220,7 @@ fun MoreMenuContent(
         canReceivePayment,
         canSuppliers,
         canPaySupplier,
+        canStock,
         canCashBank,
         canExpenses,
         canNotes,
@@ -360,6 +366,17 @@ fun MoreMenuContent(
                 testTag = "more_item_categories",
                 allowed = canExpenses && !isSimpleMode
             ),
+            MoreMenuEntry(
+                id = "product_bin",
+                group = MoreGroup.STOCK_BUYING,
+                titleEn = "Bin",
+                titleBn = "বিন",
+                keywords = "bin trash recycle deleted restore product",
+                icon = Icons.Outlined.DeleteOutline,
+                action = MoreTileAction.OpenProductBin,
+                testTag = "more_item_bin",
+                allowed = canStock && !isFatherMode
+            ),
 
             // TOOLS
             MoreMenuEntry(
@@ -387,8 +404,8 @@ fun MoreMenuContent(
             MoreMenuEntry(
                 id = "financial_reports",
                 group = MoreGroup.TOOLS,
-                titleEn = "Financial Reports",
-                titleBn = "আর্থিক রিপোর্ট",
+                titleEn = "Reports",
+                titleBn = "রিপোর্ট",
                 keywords = "financial reports report statement pdf csv daybook profit loss",
                 icon = Icons.Outlined.Assessment,
                 action = MoreTileAction.Destination(BusinessNavDestination.FINANCIAL_REPORTS_HUB),
@@ -618,6 +635,7 @@ fun MoreMenuContent(
             MoreTileAction.OpenPaymentOut -> activeModal = MoreQuickModal.PAYMENT_OUT
             MoreTileAction.OpenRecordPurchase -> activeModal = MoreQuickModal.RECORD_PURCHASE
             MoreTileAction.OpenAddParty -> activeModal = MoreQuickModal.ADD_PARTY
+            MoreTileAction.OpenProductBin -> activeModal = MoreQuickModal.PRODUCT_BIN
             MoreTileAction.OpenSettings -> onOpenSettings?.invoke()
             MoreTileAction.ExitFatherMode -> showExitFatherPinDialog = true
             MoreTileAction.LogOut -> authViewModel.signOut(context)
@@ -678,7 +696,7 @@ fun MoreMenuContent(
             }
 
             BoxWithConstraints(modifier = Modifier.weight(1f).fillMaxWidth()) {
-                val columnCount = if (maxWidth < 345.dp) 3 else 4
+                val columnCount = if (maxWidth < 420.dp) 3 else 4
 
                 LazyColumn(
                     modifier = Modifier
@@ -693,7 +711,9 @@ fun MoreMenuContent(
                             val roleLabel = if (isOwner) {
                                 ShopLocale.get("owner_badge", currentLanguage)
                             } else {
-                                currentMember?.roleLabel?.ifBlank { "Staff" } ?: "Staff"
+                                currentMember?.roleLabel?.ifBlank {
+                                    if (currentLanguage == AppLanguage.BN) "কর্মী" else "Staff"
+                                } ?: if (currentLanguage == AppLanguage.BN) "কর্মী" else "Staff"
                             }
                             val metaLine = listOfNotNull(
                                 store?.address?.takeIf { it.isNotBlank() },
@@ -884,7 +904,185 @@ fun MoreMenuContent(
             canAddSupplier = canSuppliers,
             onDismiss = { activeModal = MoreQuickModal.NONE }
         )
+        MoreQuickModal.PRODUCT_BIN -> MoreProductBinDialog(
+            products = productBin,
+            isOwner = isOwner,
+            currentLanguage = currentLanguage,
+            onRestore = { storeViewModel.restoreProductFromBin(it.id) },
+            onEmptyBin = { storeViewModel.emptyProductBin() },
+            onDismiss = { activeModal = MoreQuickModal.NONE }
+        )
         MoreQuickModal.NONE -> {}
+    }
+}
+
+@Composable
+private fun MoreProductBinDialog(
+    products: List<com.example.data.model.Product>,
+    isOwner: Boolean,
+    currentLanguage: AppLanguage,
+    onRestore: (com.example.data.model.Product) -> Unit,
+    onEmptyBin: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    val isBn = currentLanguage == AppLanguage.BN
+    androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
+        Surface(
+            shape = RoundedCornerShape(22.dp),
+            color = Color(0xFF141814),
+            border = BorderStroke(1.dp, Color(0x38FFFFFF)),
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag("more_product_bin_dialog")
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = if (isBn) "পণ্য বিন (${ShopLocale.formatNumber(products.size.toLong(), currentLanguage)})" else "Product Bin (${products.size})",
+                        color = TextPrimary,
+                        fontSize = 17.sp,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        softWrap = false,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f)
+                    )
+                    if (isOwner && products.isNotEmpty()) {
+                        Surface(
+                            onClick = onEmptyBin,
+                            shape = RoundedCornerShape(14.dp),
+                            color = AlertRed.copy(alpha = 0.16f),
+                            border = BorderStroke(1.dp, AlertRed.copy(alpha = 0.45f)),
+                            modifier = Modifier.testTag("more_empty_bin_btn")
+                        ) {
+                            Text(
+                                text = if (isBn) "সব মুছুন" else "Empty Bin",
+                                color = AlertRed,
+                                fontSize = 11.5.sp,
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1,
+                                softWrap = false,
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                            )
+                        }
+                    }
+                }
+
+                if (products.isEmpty()) {
+                    PlainEmptyState(
+                        message = if (isBn) "রিসাইকেল বিন খালি" else "Recycle Bin is empty"
+                    )
+                } else {
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .defaultMinSize(minHeight = 100.dp)
+                            .height(280.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        items(products.size, key = { products[it].id }) { idx ->
+                            val item = products[idx]
+                            val unitLabel = ShopLocale.displayUnit(item.unit, currentLanguage)
+                            Surface(
+                                shape = RoundedCornerShape(14.dp),
+                                color = Color(0xFF1D221D),
+                                border = BorderStroke(1.dp, Color(0x28FFFFFF))
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Column(
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .padding(end = 8.dp)
+                                    ) {
+                                        Text(
+                                            text = if (isBn && item.nameBn.isNotBlank()) item.nameBn else item.name,
+                                            color = TextPrimary,
+                                            fontSize = 13.5.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                        Text(
+                                            text = "${ShopLocale.formatNumber(item.stock, currentLanguage)} $unitLabel · ${ShopLocale.formatMoney(item.sellPrice, currentLanguage)}",
+                                            color = TextSecondary,
+                                            fontSize = 11.5.sp,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+                                    Surface(
+                                        onClick = { onRestore(item) },
+                                        shape = RoundedCornerShape(12.dp),
+                                        color = VividGreen.copy(alpha = 0.16f),
+                                        border = BorderStroke(1.dp, VividGreen.copy(alpha = 0.55f))
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Outlined.RestoreFromTrash,
+                                                contentDescription = null,
+                                                tint = VividGreen,
+                                                modifier = Modifier.size(14.dp)
+                                            )
+                                            Text(
+                                                text = if (isBn) "ফেরত নিন" else "Restore",
+                                                color = VividGreen,
+                                                fontSize = 11.5.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                maxLines = 1,
+                                                softWrap = false
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Surface(
+                    onClick = onDismiss,
+                    shape = RoundedCornerShape(14.dp),
+                    color = Color(0xFF242924),
+                    border = BorderStroke(1.dp, Color(0x30FFFFFF)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 10.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = if (isBn) "বন্ধ করুন" else "Close",
+                            color = TextPrimary,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1,
+                            softWrap = false
+                        )
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -1178,8 +1376,8 @@ private fun MoreGridTile(
                 lineHeight = if (isFatherMode) 16.sp else 13.5.sp,
                 fontWeight = if (isFatherMode) FontWeight.Bold else FontWeight.Medium,
                 textAlign = TextAlign.Center,
-                maxLines = if (isFatherMode) 1 else 2,
-                softWrap = !isFatherMode,
+                maxLines = 1,
+                softWrap = false,
                 overflow = TextOverflow.Ellipsis
             )
         }

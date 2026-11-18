@@ -197,8 +197,15 @@ fun SalesBarChart(
     points: List<DailySalesPoint>,
     modifier: Modifier = Modifier
 ) {
+    val lang = com.example.util.LocalAppLanguage.current
     if (points.isEmpty()) {
-        PlainEmptyState(message = "No sales recorded in this period")
+        PlainEmptyState(
+            message = if (lang == com.example.util.AppLanguage.BN) {
+                "এই সময়ে কোনো বিক্রয় নেই"
+            } else {
+                "No sales recorded in this period"
+            }
+        )
         return
     }
 
@@ -218,11 +225,12 @@ fun SalesBarChart(
             val ratio = (pt.salesAmount / maxSales).toFloat().coerceIn(0.18f, 1f)
             val barHeight = 76.dp * ratio
             val barShape = RoundedCornerShape(9.dp)
-            val shortValue = if (pt.salesAmount >= 1000) {
+            val rawShortValue = if (pt.salesAmount >= 1000) {
                 "${String.format(java.util.Locale.US, "%.1f", pt.salesAmount / 1000).trimEnd('0').trimEnd('.')}k"
             } else {
                 pt.salesAmount.toInt().toString()
             }
+            val shortValue = com.example.util.ShopLocale.digits(rawShortValue, lang)
 
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
@@ -268,7 +276,7 @@ fun SalesBarChart(
                 Spacer(modifier = Modifier.height(6.dp))
 
                 Text(
-                    text = pt.label,
+                    text = com.example.util.ShopLocale.digits(pt.label, lang),
                     color = TextSecondary,
                     fontSize = 10.sp,
                     fontWeight = FontWeight.Medium,
@@ -291,8 +299,19 @@ fun CategoryDonutChart(
     modifier: Modifier = Modifier,
     compact: Boolean = false
 ) {
+    val lang = com.example.util.LocalAppLanguage.current
     if (stats.isEmpty()) {
-        PlainEmptyState(message = if (compact) "No data" else "No category sales recorded in this period")
+        PlainEmptyState(
+            message = if (compact) {
+                if (lang == com.example.util.AppLanguage.BN) "কোনো তথ্য নেই" else "No data"
+            } else {
+                if (lang == com.example.util.AppLanguage.BN) {
+                    "এই সময়ে ক্যাটেগরি বিক্রয় নেই"
+                } else {
+                    "No category sales recorded in this period"
+                }
+            }
+        )
         return
     }
 
@@ -354,6 +373,8 @@ fun CategoryDonutChart(
             ) {
                 stats.take(3).forEachIndexed { idx, stat ->
                     val col = palette[idx % palette.size]
+                    val catLabel = com.example.util.ShopLocale.displayCategory(stat.category, lang)
+                    val countStr = com.example.util.ShopLocale.formatNumber(stat.itemsCount.toLong(), lang)
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier.fillMaxWidth()
@@ -366,7 +387,7 @@ fun CategoryDonutChart(
                         )
                         Spacer(modifier = Modifier.width(5.dp))
                         Text(
-                            text = "${stat.itemsCount} ${stat.category}",
+                            text = "$countStr $catLabel",
                             color = TextSecondary,
                             fontSize = 10.sp,
                             maxLines = 1,
