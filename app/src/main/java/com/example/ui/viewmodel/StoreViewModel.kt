@@ -64,6 +64,7 @@ import com.example.domain.SupplierStatementReport
 import com.example.ui.components.ShopNavTab
 import com.example.util.AppLanguage
 import com.example.util.BusinessCardLocalStore
+import com.example.util.FirestoreErrorHandler
 import com.example.util.NetworkMonitor
 import com.example.util.PhotoStorageMode
 import com.example.util.ReceiptImageStyle
@@ -197,9 +198,6 @@ class StoreViewModel(
     val members: StateFlow<List<StoreMember>> = repository.observeMembers(storeId)
         .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
-    val invites: StateFlow<List<StoreInvite>> = repository.observeInvites(storeId)
-        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
-
     val currentMember: StateFlow<StoreMember?> = repository.observeMyMember(storeId, currentUserId)
         .stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
@@ -219,6 +217,12 @@ class StoreViewModel(
             mem?.role.equals("owner", ignoreCase = true)
         }
     }.stateIn(viewModelScope, SharingStarted.Eagerly, storeId == "demo_store")
+
+    val invites: StateFlow<List<StoreInvite>> = isOwner
+        .flatMapLatest { owner ->
+            if (owner) repository.observeInvites(storeId) else flowOf(emptyList())
+        }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     val isRemoved: StateFlow<Boolean> = combine(isOwner, currentMember) { owner, mem ->
         !owner && mem?.status.equals("Removed", ignoreCase = true)
@@ -899,7 +903,14 @@ class StoreViewModel(
             customers,
             suppliers,
             payments,
-            currentLanguage
+            currentLanguage,
+            purchases,
+            purchaseReturns,
+            supplierPayments,
+            expenses,
+            otherIncomes,
+            accounts,
+            adjustments
         )
     ) { arr ->
         @Suppress("UNCHECKED_CAST")
@@ -911,7 +922,14 @@ class StoreViewModel(
             customers = arr[4] as List<Customer>,
             suppliers = arr[5] as List<Supplier>,
             allPayments = arr[6] as List<Payment>,
-            lang = arr[7] as AppLanguage
+            lang = arr[7] as AppLanguage,
+            allPurchases = arr[8] as List<Purchase>,
+            allPurchaseReturns = arr[9] as List<PurchaseReturn>,
+            allSupplierPayments = arr[10] as List<SupplierPayment>,
+            allExpenses = arr[11] as List<Expense>,
+            allOtherIncomes = arr[12] as List<OtherIncome>,
+            accounts = arr[13] as List<Account>,
+            allAdjustments = arr[14] as List<AccountAdjustment>
         )
     }.stateIn(
         viewModelScope,
@@ -1057,7 +1075,12 @@ class StoreViewModel(
             stockPrefs?.setOwnerPin(pin)
             onDone()
         } catch (e: Exception) {
-            _errorMessage.value = e.localizedMessage ?: "Invalid PIN"
+            _errorMessage.value = FirestoreErrorHandler.toUserFriendlyMessage(
+                e,
+                currentLanguage.value,
+                fallbackEn = "Invalid PIN. Please enter a 4-6 digit PIN.",
+                fallbackBn = "সঠিক ৪ থেকে ৬ সংখ্যার পিন দিন।"
+            )
         }
     }
 
@@ -1345,7 +1368,12 @@ class StoreViewModel(
                 stockPrefs?.setPhotoStorageMode(targetMode)
                 onDone(res.convertedCount, res.skippedCount, res.failedCount)
             } catch (e: Exception) {
-                _errorMessage.value = e.localizedMessage ?: "Conversion failed"
+                _errorMessage.value = FirestoreErrorHandler.toUserFriendlyMessage(
+                    e,
+                    currentLanguage.value,
+                    fallbackEn = "Photo conversion failed. Please try again.",
+                    fallbackBn = "ছবি রূপান্তর করা যায়নি। আবার চেষ্টা করুন।"
+                )
             } finally {
                 _isBusy.value = false
             }
@@ -1431,7 +1459,13 @@ class StoreViewModel(
                 )
                 onSuccess(receipt)
             } catch (e: Exception) {
-                _errorMessage.value = e.localizedMessage ?: ShopLocale.get("err_checkout_failed", currentLanguage.value)
+                val lang = currentLanguage.value
+                _errorMessage.value = FirestoreErrorHandler.toUserFriendlyMessage(
+                    e,
+                    lang,
+                    fallbackEn = ShopLocale.get("err_checkout_failed", lang),
+                    fallbackBn = ShopLocale.get("err_checkout_failed", lang)
+                )
             } finally {
                 _isBusy.value = false
             }
@@ -1460,7 +1494,12 @@ class StoreViewModel(
                 val id = repository.addCustomer(storeId, cust)
                 onSuccess(id)
             } catch (e: Exception) {
-                _errorMessage.value = e.localizedMessage ?: "Failed to add customer"
+                _errorMessage.value = FirestoreErrorHandler.toUserFriendlyMessage(
+                    e,
+                    currentLanguage.value,
+                    fallbackEn = "Failed to add customer. Please try again.",
+                    fallbackBn = "ক্রেতা যোগ করা যায়নি। আবার চেষ্টা করুন।"
+                )
             } finally {
                 _isBusy.value = false
             }
@@ -1806,10 +1845,15 @@ class StoreViewModel(
             _isBusy.value = true
             clearErrorMessage()
             try {
-                repository.createStaffInvite(invite)
-                onSuccess(invite)
+                val generatedCode = repository.createStaffInvite(invite)
+                onSuccess(invite.copy(id = generatedCode, code = generatedCode))
             } catch (e: Exception) {
-                _errorMessage.value = e.localizedMessage ?: "Failed to create invite"
+                _errorMessage.value = FirestoreErrorHandler.toUserFriendlyMessage(
+                    e,
+                    currentLanguage.value,
+                    fallbackEn = "Could not create staff invite. Please try again.",
+                    fallbackBn = "স্টাফ আমন্ত্রণ তৈরি করা যায়নি। আবার চেষ্টা করুন।"
+                )
             } finally {
                 _isBusy.value = false
             }
@@ -1903,7 +1947,12 @@ class StoreViewModel(
                 _healthProblems.value = results
                 _lastHealthScanMillis.value = System.currentTimeMillis()
             } catch (e: Exception) {
-                _errorMessage.value = e.localizedMessage ?: "Health scan failed"
+                _errorMessage.value = FirestoreErrorHandler.toUserFriendlyMessage(
+                    e,
+                    currentLanguage.value,
+                    fallbackEn = "Health scan failed. Please try again.",
+                    fallbackBn = "ডেটা যাচাই সম্পন্ন করা যায়নি। আবার চেষ্টা করুন।"
+                )
             } finally {
                 _isScanningHealth.value = false
             }
@@ -1921,7 +1970,11 @@ class StoreViewModel(
                 _healthProblems.value = _healthProblems.value.filterNot { it.id == problem.id }
                 onSuccess()
             } else {
-                _errorMessage.value = "Fix could not be applied"
+                _errorMessage.value = if (currentLanguage.value == AppLanguage.BN) {
+                    "সমাধানটি সংরক্ষণ করা যায়নি।"
+                } else {
+                    "Fix could not be applied."
+                }
             }
         }
     }
@@ -1969,7 +2022,12 @@ class StoreViewModel(
                 }
                 repository.saveBusinessStrategy(storeId, strategy, currentUserId)
             } catch (e: Exception) {
-                _errorMessage.value = e.localizedMessage ?: "Strategy refresh failed"
+                _errorMessage.value = FirestoreErrorHandler.toUserFriendlyMessage(
+                    e,
+                    currentLanguage.value,
+                    fallbackEn = "Could not refresh advice right now.",
+                    fallbackBn = "এই মুহূর্তে পরামর্শ রিফ্রেশ করা যায়নি।"
+                )
             } finally {
                 _isStrategyRefreshing.value = false
             }
@@ -2058,7 +2116,12 @@ class StoreViewModel(
                 )
                 onPreviewReady(rawJson, preview)
             } catch (e: Exception) {
-                _errorMessage.value = e.localizedMessage ?: "Invalid backup file"
+                _errorMessage.value = FirestoreErrorHandler.toUserFriendlyMessage(
+                    e,
+                    currentLanguage.value,
+                    fallbackEn = "Invalid backup file.",
+                    fallbackBn = "ব্যাকআপ ফাইলটি সঠিক নয়।"
+                )
             } finally {
                 _isBusy.value = false
             }
@@ -2084,7 +2147,12 @@ class StoreViewModel(
                 )
                 onSuccess(summary)
             } catch (e: Exception) {
-                _errorMessage.value = e.localizedMessage ?: "Backup import failed"
+                _errorMessage.value = FirestoreErrorHandler.toUserFriendlyMessage(
+                    e,
+                    currentLanguage.value,
+                    fallbackEn = "Backup import failed. Please try again.",
+                    fallbackBn = "ব্যাকআপ ইমপোর্ট ব্যর্থ হয়েছে। আবার চেষ্টা করুন।"
+                )
             } finally {
                 _isBusy.value = false
             }
@@ -2190,7 +2258,12 @@ class StoreViewModel(
                 }
                 onReadyFile(file)
             } catch (e: Exception) {
-                _errorMessage.value = e.localizedMessage ?: "CSV export failed"
+                _errorMessage.value = FirestoreErrorHandler.toUserFriendlyMessage(
+                    e,
+                    lang,
+                    fallbackEn = "CSV export failed. Please try again.",
+                    fallbackBn = "CSV এক্সপোর্ট ব্যর্থ হয়েছে। আবার চেষ্টা করুন।"
+                )
             } finally {
                 _isBusy.value = false
             }
@@ -2213,7 +2286,12 @@ class StoreViewModel(
                 block()
                 onSuccess()
             } catch (e: Exception) {
-                _errorMessage.value = e.localizedMessage ?: "Operation failed"
+                _errorMessage.value = FirestoreErrorHandler.toUserFriendlyMessage(
+                    e,
+                    currentLanguage.value,
+                    fallbackEn = "Operation failed. Please try again.",
+                    fallbackBn = "কাজটি সম্পন্ন করা যায়নি। আবার চেষ্টা করুন।"
+                )
             } finally {
                 _isBusy.value = false
             }

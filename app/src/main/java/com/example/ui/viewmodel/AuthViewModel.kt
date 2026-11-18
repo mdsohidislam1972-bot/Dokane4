@@ -15,6 +15,7 @@ import com.example.data.repository.StoreRepository
 import com.example.domain.ShopType
 import com.example.domain.ShopTypeCatalog
 import com.example.util.AppLanguage
+import com.example.util.FirestoreErrorHandler
 import com.example.util.ShopLocale
 import com.google.android.libraries.identity.googleid.GetGoogleIdOption
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
@@ -69,12 +70,14 @@ class AuthViewModel(
     val successMessage: StateFlow<String?> = _successMessage.asStateFlow()
 
     private var profileJob: Job? = null
+    private var boundUserId: String? = null
     private var isInDemoMode = false
 
     private val authStateListener = FirebaseAuth.AuthStateListener { firebaseAuth ->
         if (isInDemoMode) return@AuthStateListener
         val user = firebaseAuth.currentUser
         if (user == null) {
+            boundUserId = null
             profileJob?.cancel()
             _uiState.value = AuthUiState.Unauthenticated
         } else {
@@ -98,6 +101,12 @@ class AuthViewModel(
     }
 
     private fun observeUserStoreBinding(user: FirebaseUser) {
+        if (profileJob?.isActive == true && boundUserId == user.uid) return
+        val switchedAccount = boundUserId != user.uid
+        boundUserId = user.uid
+        if (switchedAccount) {
+            clearMessages()
+        }
         profileJob?.cancel()
         profileJob = viewModelScope.launch {
             repository.observeUserProfile(user.uid).collectLatest { profile ->
@@ -163,7 +172,12 @@ class AuthViewModel(
                     observeUserStoreBinding(user)
                 }
             } catch (e: Exception) {
-                _errorMessage.value = e.localizedMessage ?: "Sign in failed"
+                _errorMessage.value = FirestoreErrorHandler.toUserFriendlyMessage(
+                    e,
+                    lang,
+                    fallbackEn = "Sign in failed. Please check your details and try again.",
+                    fallbackBn = "সাইন ইন করা যায়নি। তথ্য যাচাই করে আবার চেষ্টা করুন।"
+                )
             } finally {
                 _isBusy.value = false
             }
@@ -210,7 +224,12 @@ class AuthViewModel(
                     observeUserStoreBinding(user)
                 }
             } catch (e: Exception) {
-                _errorMessage.value = e.localizedMessage ?: "Account creation failed"
+                _errorMessage.value = FirestoreErrorHandler.toUserFriendlyMessage(
+                    e,
+                    lang,
+                    fallbackEn = "Could not create account. Please try again.",
+                    fallbackBn = "অ্যাকাউন্ট তৈরি করা যায়নি। আবার চেষ্টা করুন।"
+                )
             } finally {
                 _isBusy.value = false
             }
@@ -240,7 +259,12 @@ class AuthViewModel(
                     "Password reset email sent to $cleanEmail"
                 }
             } catch (e: Exception) {
-                _errorMessage.value = e.localizedMessage ?: "Could not send reset email"
+                _errorMessage.value = FirestoreErrorHandler.toUserFriendlyMessage(
+                    e,
+                    lang,
+                    fallbackEn = "Could not send password reset email.",
+                    fallbackBn = "পাসওয়ার্ড রিসেট ইমেইল পাঠানো যায়নি।"
+                )
             } finally {
                 _isBusy.value = false
             }
@@ -251,7 +275,11 @@ class AuthViewModel(
         val lang = currentLanguage.value
         val firebaseAuth = auth
         if (firebaseAuth == null) {
-            _errorMessage.value = "Authentication unavailable"
+            _errorMessage.value = if (lang == AppLanguage.BN) {
+                "অথেনটিকেশন সার্ভিস পাওয়া যায়নি"
+            } else {
+                "Authentication service is unavailable"
+            }
             return
         }
         val webClientIdRes = context.resources.getIdentifier(
@@ -309,14 +337,28 @@ class AuthViewModel(
                         observeUserStoreBinding(user)
                     }
                 } else {
-                    _errorMessage.value = "Unexpected credential type"
+                    _errorMessage.value = if (lang == AppLanguage.BN) {
+                        "Google সাইন-ইন সম্পন্ন করা যায়নি। আবার চেষ্টা করুন।"
+                    } else {
+                        "Google Sign-In could not be completed. Please try again."
+                    }
                 }
             } catch (_: GetCredentialCancellationException) {
                 // User cancelled Google Sign-In dialog; no error message needed
             } catch (e: GetCredentialException) {
-                _errorMessage.value = e.localizedMessage ?: "Google Sign-In failed"
+                _errorMessage.value = FirestoreErrorHandler.toUserFriendlyMessage(
+                    e,
+                    lang,
+                    fallbackEn = "Google Sign-In failed. Please try again.",
+                    fallbackBn = "Google সাইন-ইন ব্যর্থ হয়েছে। আবার চেষ্টা করুন।"
+                )
             } catch (e: Exception) {
-                _errorMessage.value = e.localizedMessage ?: "Google Sign-In failed"
+                _errorMessage.value = FirestoreErrorHandler.toUserFriendlyMessage(
+                    e,
+                    lang,
+                    fallbackEn = "Google Sign-In failed. Please try again.",
+                    fallbackBn = "Google সাইন-ইন ব্যর্থ হয়েছে। আবার চেষ্টা করুন।"
+                )
             } finally {
                 _isBusy.value = false
             }
@@ -372,7 +414,12 @@ class AuthViewModel(
                     )
                 }
             } catch (e: Exception) {
-                _errorMessage.value = e.localizedMessage ?: ShopLocale.get("err_create_store_failed", lang)
+                _errorMessage.value = FirestoreErrorHandler.toUserFriendlyMessage(
+                    e,
+                    lang,
+                    fallbackEn = ShopLocale.get("err_create_store_failed", lang),
+                    fallbackBn = ShopLocale.get("err_create_store_failed", lang)
+                )
             } finally {
                 _isBusy.value = false
             }
@@ -412,10 +459,20 @@ class AuthViewModel(
                         userProfile = profile.copy(storeId = joinedStoreId)
                     )
                 }.onFailure { err ->
-                    _errorMessage.value = err.message ?: ShopLocale.get("err_join_store_failed", lang)
+                    _errorMessage.value = FirestoreErrorHandler.toUserFriendlyMessage(
+                        err,
+                        lang,
+                        fallbackEn = ShopLocale.get("err_join_store_failed", lang),
+                        fallbackBn = ShopLocale.get("err_join_store_failed", lang)
+                    )
                 }
             } catch (e: Exception) {
-                _errorMessage.value = e.localizedMessage ?: ShopLocale.get("err_join_store_failed", lang)
+                _errorMessage.value = FirestoreErrorHandler.toUserFriendlyMessage(
+                    e,
+                    lang,
+                    fallbackEn = ShopLocale.get("err_join_store_failed", lang),
+                    fallbackBn = ShopLocale.get("err_join_store_failed", lang)
+                )
             } finally {
                 _isBusy.value = false
             }
@@ -425,6 +482,7 @@ class AuthViewModel(
     fun signOut(context: Context) {
         viewModelScope.launch {
             isInDemoMode = false
+            boundUserId = null
             profileJob?.cancel()
             runCatching { auth?.signOut() }
             runCatching {

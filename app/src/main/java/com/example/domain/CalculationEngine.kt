@@ -224,6 +224,71 @@ data class MonthlyCustomerStat(
     val bakiAmount: Double
 )
 
+data class MonthlyDebtorRow(
+    val customerId: String,
+    val customerName: String,
+    val customerPhone: String,
+    val amountOwed: Double,
+    val daysOverdue: Long
+)
+
+data class MonthlyBakiAgeing(
+    val bucket0To30: Double = 0.0,
+    val bucket31To60: Double = 0.0,
+    val bucket60Plus: Double = 0.0
+)
+
+data class MonthlySupplierOwedRow(
+    val supplierId: String,
+    val supplierName: String,
+    val supplierPhone: String,
+    val amountOwed: Double
+)
+
+data class MonthlyLowStockRow(
+    val productId: String,
+    val productName: String,
+    val stock: Double,
+    val lowStockLimit: Double,
+    val unit: String,
+    val stockValueAtCost: Double
+)
+
+data class MonthlySlowStockRow(
+    val productId: String,
+    val productName: String,
+    val stock: Double,
+    val unit: String,
+    val moneyStuck: Double
+)
+
+data class MonthlyExpenseCategoryRow(
+    val category: String,
+    val amount: Double,
+    val percentage: Double
+)
+
+data class MonthlyAccountCashRow(
+    val accountId: String,
+    val accountName: String,
+    val accountType: String,
+    val opening: Double,
+    val moneyIn: Double,
+    val moneyOut: Double,
+    val closing: Double
+)
+
+data class MonthlyReconciliationCheck(
+    val key: String, // "cash", "baki", "suppliers"
+    val opening: Double = 0.0,
+    val totalIn: Double = 0.0,
+    val totalOut: Double = 0.0,
+    val actualClosing: Double = 0.0,
+    val expectedClosing: Double = 0.0,
+    val difference: Double = 0.0,
+    val matches: Boolean = true
+)
+
 data class MonthlyReportData(
     val year: Int,
     val month: Int,
@@ -236,7 +301,57 @@ data class MonthlyReportData(
     val bakiCustomersOwe: Double,
     val debtToSuppliers: Double,
     val customerStats: List<MonthlyCustomerStat>,
-    val itemsSold: List<ProductSoldStat>
+    val itemsSold: List<ProductSoldStat>,
+    // 1 & 2. Sales & P&L
+    val grossSales: Double = totalSales,
+    val totalDiscounts: Double = 0.0,
+    val netSales: Double = totalSales,
+    val averageOrderValue: Double = 0.0,
+    val cashReceivedSales: Double = 0.0,
+    val bakiCreditSales: Double = 0.0,
+    val topProductsByAmount: List<ProductSoldStat> = itemsSold.sortedByDescending { it.totalSalesAmount }.take(5),
+    val topCustomersByAmount: List<MonthlyCustomerStat> = emptyList(),
+    val costOfGoodsSold: Double = 0.0,
+    val grossProfit: Double = totalProfit,
+    val totalExpenses: Double = 0.0,
+    val otherIncome: Double = 0.0,
+    val netProfit: Double = totalProfit,
+    // 3. Baki / Credit
+    val bakiOpeningReceivable: Double = 0.0,
+    val bakiNewCreditGiven: Double = 0.0,
+    val bakiCollectedThisMonth: Double = 0.0,
+    val bakiClosingReceivable: Double = bakiCustomersOwe,
+    val debtorRows: List<MonthlyDebtorRow> = emptyList(),
+    val bakiAgeing: MonthlyBakiAgeing = MonthlyBakiAgeing(),
+    val bakiHasActivityOrDue: Boolean = false,
+    // 4. Suppliers
+    val supplierOpeningPayable: Double = 0.0,
+    val supplierPurchasesThisMonth: Double = 0.0,
+    val supplierPaidThisMonth: Double = 0.0,
+    val supplierReturnsThisMonth: Double = 0.0,
+    val supplierClosingPayable: Double = debtToSuppliers,
+    val supplierOwedRows: List<MonthlySupplierOwedRow> = emptyList(),
+    val supplierHasActivityOrDue: Boolean = false,
+    // 5. Stock
+    val openingStockValue: Double = stockValueAtCost,
+    val purchasedStockValue: Double = 0.0,
+    val soldStockAtCost: Double = 0.0,
+    val closingStockValue: Double = stockValueAtCost,
+    val lowStockItems: List<MonthlyLowStockRow> = emptyList(),
+    val slowStock30DayItems: List<MonthlySlowStockRow> = emptyList(),
+    val totalSlowStockMoneyStuck: Double = 0.0,
+    // 6. Expenses
+    val expensesByCategory: List<MonthlyExpenseCategoryRow> = emptyList(),
+    // 7. Cash & Bank
+    val accountCashRows: List<MonthlyAccountCashRow> = emptyList(),
+    val cashOpeningTotal: Double = 0.0,
+    val cashInTotal: Double = 0.0,
+    val cashOutTotal: Double = 0.0,
+    val cashClosingBalance: Double = 0.0,
+    // Checks
+    val cashCheck: MonthlyReconciliationCheck = MonthlyReconciliationCheck("cash"),
+    val bakiCheck: MonthlyReconciliationCheck = MonthlyReconciliationCheck("baki"),
+    val supplierCheck: MonthlyReconciliationCheck = MonthlyReconciliationCheck("suppliers")
 )
 
 enum class HealthProblemType {
@@ -1928,7 +2043,7 @@ object CalculationEngine {
     }
 
     /**
-     * Monthly Report data aggregation for Step 5.
+     * Complete month-end Monthly Report calculation reusing existing data and formulas.
      */
     fun calculateMonthlyReportData(
         year: Int,
@@ -1938,7 +2053,14 @@ object CalculationEngine {
         customers: List<Customer>,
         suppliers: List<Supplier>,
         allPayments: List<Payment>,
-        lang: AppLanguage = AppLanguage.EN
+        lang: AppLanguage = AppLanguage.EN,
+        allPurchases: List<Purchase> = emptyList(),
+        allPurchaseReturns: List<PurchaseReturn> = emptyList(),
+        allSupplierPayments: List<SupplierPayment> = emptyList(),
+        allExpenses: List<Expense> = emptyList(),
+        allOtherIncomes: List<OtherIncome> = emptyList(),
+        accounts: List<Account> = emptyList(),
+        allAdjustments: List<AccountAdjustment> = emptyList()
     ): MonthlyReportData {
         val calStart = Calendar.getInstance().apply {
             set(Calendar.YEAR, year)
@@ -1961,34 +2083,46 @@ object CalculationEngine {
             set(Calendar.MILLISECOND, 999)
         }
         val endMillis = calEnd.timeInMillis
+        val nowMillis = System.currentTimeMillis()
+        val asOfMillis = minOf(nowMillis, endMillis)
+        val dayMs = 86_400_000L
 
         val monthLabel = ShopLocale.formatMonthYear(year, month, lang)
-        val monthSales = allSales.filter {
-            val ts = it.createdAt?.toDate()?.time ?: 0L
-            ts in startMillis..endMillis
-        }
 
-        val totalSales = monthSales.sumOf { it.grandTotal }
-        val totalProfit = monthSales.sumOf { it.profit }
+        fun saleTs(s: Sale): Long = s.createdAt?.toDate()?.time ?: 0L
+        fun paymentTs(p: Payment): Long = if (p.paymentDate > 0L) p.paymentDate else (p.createdAt?.toDate()?.time ?: 0L)
+        fun purchaseTs(p: Purchase): Long = p.createdAt?.toDate()?.time ?: 0L
+        fun returnTs(r: PurchaseReturn): Long = r.createdAt?.toDate()?.time ?: 0L
+        fun supPaymentTs(sp: SupplierPayment): Long = if (sp.paymentDate > 0L) sp.paymentDate else (sp.createdAt?.toDate()?.time ?: 0L)
+        fun expenseTs(e: Expense): Long = if (e.date > 0L) e.date else (e.createdAt?.toDate()?.time ?: 0L)
+        fun incomeTs(i: OtherIncome): Long = if (i.date > 0L) i.date else (i.createdAt?.toDate()?.time ?: 0L)
+
+        // -------------------------------------------------------------
+        // 1 & 2. SALES
+        // -------------------------------------------------------------
+        val monthSales = allSales.filter { saleTs(it) in startMillis..endMillis }
+        val grossSales = roundMoney(
+            monthSales.sumOf { s -> if (s.subtotal > 0.0) s.subtotal else (s.grandTotal + s.discount) }
+        )
+        val totalDiscounts = roundMoney(monthSales.sumOf { it.discount })
+        val netSales = roundMoney(monthSales.sumOf { it.grandTotal })
         val totalOrders = monthSales.size.toLong()
-        val totalItemsSold = monthSales.sumOf { it.totalItems }
+        val totalItemsSold = roundStock(monthSales.sumOf { it.totalItems })
+        val averageOrderValue = if (totalOrders > 0L) roundMoney(netSales / totalOrders.toDouble()) else 0.0
+        val cashReceivedSales = roundMoney(monthSales.filter { it.paymentType != "baki" }.sumOf { it.grandTotal })
+        val bakiCreditSales = roundMoney(monthSales.filter { it.paymentType == "baki" }.sumOf { it.grandTotal })
 
-        val moneyNow = calculateMoneyNow(products, customers, suppliers, allSales, allPayments)
-
-        // Sales by customer: each customer with total bought, Paid and Baki; Cash Sale as one line
         val customerStatsMap = mutableMapOf<String, MonthlyCustomerStat>()
         var cashSaleBought = 0.0
-
         for (sale in monthSales) {
-            val isCash = sale.paymentType != "baki" && (sale.customerName == "Cash Sale" || sale.customerId.isBlank())
-            if (isCash) {
+            val isWalkInCash = sale.paymentType != "baki" && (sale.customerName == "Cash Sale" || sale.customerId.isBlank())
+            if (isWalkInCash) {
                 cashSaleBought += sale.grandTotal
             } else {
                 val key = sale.customerId.ifBlank { sale.customerName.trim().lowercase() }
                 val current = customerStatsMap[key]
                 val paid = if (sale.paymentType != "baki") sale.grandTotal else 0.0
                 val baki = if (sale.paymentType == "baki") sale.grandTotal else 0.0
-
                 if (current == null) {
                     customerStatsMap[key] = MonthlyCustomerStat(
                         customerName = sale.customerName,
@@ -2006,36 +2140,422 @@ object CalculationEngine {
                 }
             }
         }
-
         val customerStatsList = mutableListOf<MonthlyCustomerStat>()
         if (cashSaleBought > 0.0) {
             customerStatsList.add(
                 MonthlyCustomerStat(
                     customerName = "Cash Sale",
                     customerPhone = "",
-                    totalBought = cashSaleBought,
-                    paidAmount = cashSaleBought,
+                    totalBought = roundMoney(cashSaleBought),
+                    paidAmount = roundMoney(cashSaleBought),
                     bakiAmount = 0.0
                 )
             )
         }
-        customerStatsList.addAll(customerStatsMap.values.sortedByDescending { it.totalBought })
+        val namedCustomerStatsSorted = customerStatsMap.values.sortedByDescending { it.totalBought }
+        customerStatsList.addAll(namedCustomerStatsSorted)
 
         val itemsSold = calculateProductsSoldStats(monthSales)
+        val topProductsByAmount = itemsSold.sortedByDescending { it.totalSalesAmount }.take(5)
+        val topCustomersByAmount = namedCustomerStatsSorted.take(5)
+
+        // -------------------------------------------------------------
+        // 6. EXPENSES & OTHER INCOME
+        // -------------------------------------------------------------
+        val activeExpenses = allExpenses.filter { !it.isDeleted }
+        val activeOtherIncomes = allOtherIncomes.filter { !it.isDeleted }
+        val monthExpenses = activeExpenses.filter { expenseTs(it) in startMillis..endMillis }
+        val monthOtherIncomes = activeOtherIncomes.filter { incomeTs(it) in startMillis..endMillis }
+
+        val monthPurchases = allPurchases.filter { purchaseTs(it) in startMillis..endMillis }
+        val monthReturns = allPurchaseReturns.filter { returnTs(it) in startMillis..endMillis }
+
+        // -------------------------------------------------------------
+        // 8. PROFIT & LOSS (reusing calculateProfitAndLoss)
+        // -------------------------------------------------------------
+        val pnl = calculateProfitAndLoss(
+            sales = monthSales,
+            purchases = monthPurchases,
+            returns = monthReturns,
+            expenses = monthExpenses,
+            otherIncomes = monthOtherIncomes,
+            isStockBased = true
+        )
+        val costOfGoodsSold = roundMoney(pnl.costOfGoodsSold)
+        val grossProfit = roundMoney(pnl.grossProfit)
+        val totalExpenses = roundMoney(pnl.expenses)
+        val otherIncomeTotal = roundMoney(pnl.otherIncome)
+        val netProfit = roundMoney(pnl.netProfit)
+
+        val expensesByCategory = pnl.expensesByCategory.entries
+            .sortedByDescending { it.value }
+            .map { (cat, amt) ->
+                val pct = if (totalExpenses > 0.0) (amt / totalExpenses) * 100.0 else 0.0
+                MonthlyExpenseCategoryRow(
+                    category = cat.ifBlank { "Other" },
+                    amount = roundMoney(amt),
+                    percentage = pct
+                )
+            }
+
+        // -------------------------------------------------------------
+        // 7. CASH & BANK (per account using calculateAccountStatement)
+        // -------------------------------------------------------------
+        val activeAccounts = accounts.filter { !it.isArchived }
+        val accountCashRows = activeAccounts.map { acc ->
+            val stmt = calculateAccountStatement(
+                account = acc,
+                allSales = allSales,
+                allPaymentsIn = allPayments,
+                allPurchases = allPurchases,
+                allSupplierPayments = allSupplierPayments,
+                allExpenses = activeExpenses,
+                allOtherIncomes = activeOtherIncomes,
+                allAdjustments = allAdjustments,
+                period = HistoryPeriod.CUSTOM,
+                customRange = startMillis to endMillis
+            )
+            MonthlyAccountCashRow(
+                accountId = acc.id,
+                accountName = acc.name,
+                accountType = acc.type,
+                opening = roundMoney(stmt.openingBalance),
+                moneyIn = roundMoney(stmt.totalMoneyIn),
+                moneyOut = roundMoney(stmt.totalMoneyOut),
+                closing = roundMoney(stmt.closingBalance)
+            )
+        }
+        val cashOpeningTotal = roundMoney(accountCashRows.sumOf { it.opening })
+        val cashInTotal = roundMoney(accountCashRows.sumOf { it.moneyIn })
+        val cashOutTotal = roundMoney(accountCashRows.sumOf { it.moneyOut })
+        val cashClosingTotal = roundMoney(accountCashRows.sumOf { it.closing })
+        val cashExpectedClosing = roundMoney(cashOpeningTotal + cashInTotal - cashOutTotal)
+        val cashDiff = roundMoney(cashClosingTotal - cashExpectedClosing)
+        val cashCheck = MonthlyReconciliationCheck(
+            key = "cash",
+            opening = cashOpeningTotal,
+            totalIn = cashInTotal,
+            totalOut = cashOutTotal,
+            actualClosing = cashClosingTotal,
+            expectedClosing = cashExpectedClosing,
+            difference = cashDiff,
+            matches = kotlin.math.abs(cashDiff) <= 0.05
+        )
+
+        // -------------------------------------------------------------
+        // 3. BAKI / CREDIT (opening, new credit, collected, closing, overdue & ageing)
+        // -------------------------------------------------------------
+        val allBakiCustomers = customers.toMutableList()
+        for (sale in allSales) {
+            if (sale.paymentType == "baki" && sale.customerName != "Cash Sale" && sale.customerName.isNotBlank()) {
+                if (allBakiCustomers.none { doesSaleMatchCustomer(sale, it) }) {
+                    allBakiCustomers.add(
+                        Customer(
+                            id = sale.customerId.ifBlank { "legacy_${sale.customerName.trim().lowercase().replace(' ', '_')}" },
+                            name = sale.customerName.trim(),
+                            mobile = sale.customerPhone.trim(),
+                            notes = "Previous Baki Sale"
+                        )
+                    )
+                }
+            }
+        }
+
+        var bakiOpeningSum = 0.0
+        var bakiNewCreditSum = 0.0
+        var bakiCollectedSum = 0.0
+        var bakiClosingSum = 0.0
+        var bucket0To30 = 0.0
+        var bucket31To60 = 0.0
+        var bucket60Plus = 0.0
+        val debtorRows = mutableListOf<MonthlyDebtorRow>()
+
+        for (cust in allBakiCustomers) {
+            val custBakiSalesAll = allSales
+                .filter { doesSaleMatchCustomer(it, cust) && it.paymentType == "baki" }
+                .sortedBy { saleTs(it) }
+            val custPaymentsAll = allPayments.filter { doesPaymentMatchCustomer(it, cust) }
+
+            val priorBaki = custBakiSalesAll.filter { saleTs(it) < startMillis }.sumOf { it.grandTotal }
+            val priorPaid = custPaymentsAll.filter { paymentTs(it) < startMillis }.sumOf { it.amount }
+            val opening = (priorBaki - priorPaid).coerceAtLeast(0.0)
+
+            val monthBaki = custBakiSalesAll.filter { saleTs(it) in startMillis..endMillis }.sumOf { it.grandTotal }
+            val monthPaid = custPaymentsAll.filter { paymentTs(it) in startMillis..endMillis }.sumOf { it.amount }
+            val closing = (opening + monthBaki - monthPaid).coerceAtLeast(0.0)
+
+            bakiOpeningSum += opening
+            bakiNewCreditSum += monthBaki
+            bakiCollectedSum += monthPaid
+            bakiClosingSum += closing
+
+            if (closing > 0.001) {
+                // FIFO matching against baki invoices up to endMillis to determine overdue age & ageing buckets
+                val bakiUpToEnd = custBakiSalesAll.filter { saleTs(it) <= endMillis }
+                var remainingPaid = custPaymentsAll.filter { paymentTs(it) <= endMillis }.sumOf { it.amount }
+                var oldestUnpaidTs: Long? = null
+                var assignedToBuckets = 0.0
+
+                for (bSale in bakiUpToEnd) {
+                    val amount = bSale.grandTotal.coerceAtLeast(0.0)
+                    val covered = minOf(amount, remainingPaid)
+                    remainingPaid -= covered
+                    val unpaid = amount - covered
+                    if (unpaid > 0.001) {
+                        val sTs = saleTs(bSale).takeIf { it > 0L } ?: endMillis
+                        if (oldestUnpaidTs == null || sTs < oldestUnpaidTs) {
+                            oldestUnpaidTs = sTs
+                        }
+                        val ageDays = ((asOfMillis - sTs).coerceAtLeast(0L)) / dayMs
+                        when {
+                            ageDays <= 30L -> bucket0To30 += unpaid
+                            ageDays <= 60L -> bucket31To60 += unpaid
+                            else -> bucket60Plus += unpaid
+                        }
+                        assignedToBuckets += unpaid
+                    }
+                }
+                if (closing - assignedToBuckets > 0.001) {
+                    bucket0To30 += (closing - assignedToBuckets)
+                }
+                val daysOverdue = oldestUnpaidTs?.let { ((asOfMillis - it).coerceAtLeast(0L)) / dayMs } ?: 0L
+                debtorRows.add(
+                    MonthlyDebtorRow(
+                        customerId = cust.id,
+                        customerName = cust.name,
+                        customerPhone = cust.mobile,
+                        amountOwed = roundMoney(closing),
+                        daysOverdue = daysOverdue
+                    )
+                )
+            }
+        }
+        // Include any orphan customer payments in the month that didn't match a customer record
+        val matchedPaymentIds = allBakiCustomers
+            .flatMap { cust -> allPayments.filter { doesPaymentMatchCustomer(it, cust) } }
+            .map { it.id }
+            .toSet()
+        val orphanMonthPayments = allPayments
+            .filter { it.id !in matchedPaymentIds && paymentTs(it) in startMillis..endMillis }
+            .sumOf { it.amount }
+        bakiCollectedSum += orphanMonthPayments
+
+        bakiOpeningSum = roundMoney(bakiOpeningSum)
+        bakiNewCreditSum = roundMoney(bakiNewCreditSum)
+        bakiCollectedSum = roundMoney(bakiCollectedSum)
+        bakiClosingSum = roundMoney(bakiClosingSum)
+
+        val bakiExpectedClosing = roundMoney(bakiOpeningSum + bakiNewCreditSum - bakiCollectedSum)
+        val bakiDiff = roundMoney(bakiClosingSum - bakiExpectedClosing)
+        val bakiCheck = MonthlyReconciliationCheck(
+            key = "baki",
+            opening = bakiOpeningSum,
+            totalIn = bakiNewCreditSum,
+            totalOut = bakiCollectedSum,
+            actualClosing = bakiClosingSum,
+            expectedClosing = bakiExpectedClosing,
+            difference = bakiDiff,
+            matches = kotlin.math.abs(bakiDiff) <= 0.05
+        )
+        val bakiHasActivityOrDue = bakiOpeningSum > 0.001 ||
+            bakiNewCreditSum > 0.001 ||
+            bakiCollectedSum > 0.001 ||
+            bakiClosingSum > 0.001 ||
+            debtorRows.isNotEmpty()
+
+        // -------------------------------------------------------------
+        // 4. SUPPLIERS (opening, purchases, paid, closing, list owed)
+        // -------------------------------------------------------------
+        fun purchaseMatchesSup(p: Purchase, s: Supplier): Boolean =
+            if (p.supplierId.isNotBlank()) p.supplierId == s.id
+            else s.name.isNotBlank() && p.supplierName.trim().equals(s.name.trim(), ignoreCase = true)
+
+        fun spMatchesSup(sp: SupplierPayment, s: Supplier): Boolean =
+            if (sp.supplierId.isNotBlank()) sp.supplierId == s.id
+            else s.name.isNotBlank() && sp.supplierName.trim().equals(s.name.trim(), ignoreCase = true)
+
+        fun returnMatchesSup(r: PurchaseReturn, s: Supplier): Boolean =
+            if (r.supplierId.isNotBlank()) r.supplierId == s.id
+            else s.name.isNotBlank() && r.supplierName.trim().equals(s.name.trim(), ignoreCase = true)
+
+        val supplierPurchasesTotal = roundMoney(monthPurchases.sumOf { it.totalAmount })
+        val supplierPaidAtPurchase = roundMoney(monthPurchases.sumOf { it.paidAmount })
+        val supplierPayOutTotal = roundMoney(
+            allSupplierPayments.filter { supPaymentTs(it) in startMillis..endMillis }.sumOf { it.amount }
+        )
+        val supplierPaidTotal = roundMoney(supplierPaidAtPurchase + supplierPayOutTotal)
+        val supplierReturnsTotal = roundMoney(monthReturns.sumOf { it.amount })
+
+        var supplierOpeningSum = 0.0
+        var supplierClosingSum = 0.0
+        val supplierOwedRows = mutableListOf<MonthlySupplierOwedRow>()
+
+        for (sup in suppliers) {
+            val supPurchases = allPurchases.filter { purchaseMatchesSup(it, sup) }
+            val supPayments = allSupplierPayments.filter { spMatchesSup(it, sup) }
+            val supReturns = allPurchaseReturns.filter { returnMatchesSup(it, sup) }
+
+            val priorDue = supPurchases.filter { purchaseTs(it) < startMillis }.sumOf { it.dueAmount }
+            val priorPayOut = supPayments.filter { supPaymentTs(it) < startMillis }.sumOf { it.amount }
+            val priorRet = supReturns.filter { returnTs(it) < startMillis }.sumOf { it.amount }
+            val supOpening = (priorDue - priorPayOut - priorRet).coerceAtLeast(0.0)
+
+            // Back out post-endMillis movements from current stored Supplier.balance
+            val afterDue = supPurchases.filter { purchaseTs(it) > endMillis }.sumOf { it.dueAmount }
+            val afterPayOut = supPayments.filter { supPaymentTs(it) > endMillis }.sumOf { it.amount }
+            val afterRet = supReturns.filter { returnTs(it) > endMillis }.sumOf { it.amount }
+            val supClosing = (sup.balance - afterDue + afterPayOut + afterRet).coerceAtLeast(0.0)
+
+            supplierOpeningSum += supOpening
+            supplierClosingSum += supClosing
+            if (supClosing > 0.001) {
+                supplierOwedRows.add(
+                    MonthlySupplierOwedRow(
+                        supplierId = sup.id,
+                        supplierName = sup.name,
+                        supplierPhone = sup.mobile,
+                        amountOwed = roundMoney(supClosing)
+                    )
+                )
+            }
+        }
+        supplierOpeningSum = roundMoney(supplierOpeningSum)
+        supplierClosingSum = roundMoney(supplierClosingSum)
+
+        val supplierOutCombined = roundMoney(supplierPaidTotal + supplierReturnsTotal)
+        val supplierExpectedClosing = roundMoney(supplierOpeningSum + supplierPurchasesTotal - supplierOutCombined)
+        val supplierDiff = roundMoney(supplierClosingSum - supplierExpectedClosing)
+        val supplierCheck = MonthlyReconciliationCheck(
+            key = "suppliers",
+            opening = supplierOpeningSum,
+            totalIn = supplierPurchasesTotal,
+            totalOut = supplierOutCombined,
+            actualClosing = supplierClosingSum,
+            expectedClosing = supplierExpectedClosing,
+            difference = supplierDiff,
+            matches = kotlin.math.abs(supplierDiff) <= 0.05
+        )
+        val supplierHasActivityOrDue = supplierOpeningSum > 0.001 ||
+            supplierPurchasesTotal > 0.001 ||
+            supplierPaidTotal > 0.001 ||
+            supplierReturnsTotal > 0.001 ||
+            supplierClosingSum > 0.001 ||
+            supplierOwedRows.isNotEmpty()
+
+        // -------------------------------------------------------------
+        // 5. STOCK (opening, purchased, sold at cost, closing, low stock, 30-day slow stock)
+        // -------------------------------------------------------------
+        val currentStockValueAtCost = roundMoney(products.sumOf { it.stock.coerceAtLeast(0.0) * it.buyPrice })
+        val purchasedAfterEndCost = roundMoney(
+            allPurchases.filter { purchaseTs(it) > endMillis }.sumOf { it.totalAmount }
+        )
+        val soldAfterEndAtCost = roundMoney(
+            allSales.filter { saleTs(it) > endMillis }
+                .flatMap { it.items }
+                .sumOf { it.buyPrice * it.qty }
+        )
+        val closingStockValue = if (endMillis >= nowMillis) {
+            currentStockValueAtCost
+        } else {
+            roundMoney((currentStockValueAtCost - purchasedAfterEndCost + soldAfterEndAtCost).coerceAtLeast(0.0))
+        }
+        val purchasedStockValue = supplierPurchasesTotal
+        val soldStockAtCost = costOfGoodsSold
+        val openingStockValue = roundMoney((closingStockValue - purchasedStockValue + soldStockAtCost).coerceAtLeast(0.0))
+
+        val lowStockItems = products
+            .filter { it.stock <= it.lowStockLimit }
+            .sortedBy { it.stock }
+            .map { prod ->
+                MonthlyLowStockRow(
+                    productId = prod.id,
+                    productName = if (lang == AppLanguage.BN && prod.nameBn.isNotBlank()) prod.nameBn else prod.name,
+                    stock = prod.stock,
+                    lowStockLimit = prod.lowStockLimit,
+                    unit = effectiveStockUnit(prod),
+                    stockValueAtCost = roundMoney(prod.stock.coerceAtLeast(0.0) * prod.buyPrice)
+                )
+            }
+
+        val thirtyDaysStart = asOfMillis - (30L * dayMs)
+        val salesInLast30Days = allSales.filter { tsSale ->
+            val ts = saleTs(tsSale)
+            ts in thirtyDaysStart..asOfMillis
+        }
+        val slowProducts = calculateSlowSellingProducts(products, salesInLast30Days)
+        val slowStock30DayItems = slowProducts
+            .map { prod ->
+                MonthlySlowStockRow(
+                    productId = prod.id,
+                    productName = if (lang == AppLanguage.BN && prod.nameBn.isNotBlank()) prod.nameBn else prod.name,
+                    stock = prod.stock,
+                    unit = effectiveStockUnit(prod),
+                    moneyStuck = roundMoney(prod.stock.coerceAtLeast(0.0) * prod.buyPrice)
+                )
+            }
+            .sortedByDescending { it.moneyStuck }
+        val totalSlowStockMoneyStuck = roundMoney(slowStock30DayItems.sumOf { it.moneyStuck })
 
         return MonthlyReportData(
             year = year,
             month = month,
             monthLabel = monthLabel,
-            totalSales = totalSales,
-            totalProfit = totalProfit,
+            totalSales = netSales,
+            totalProfit = grossProfit,
             totalOrders = totalOrders,
             totalItemsSold = totalItemsSold,
-            stockValueAtCost = moneyNow.stockValueAtCost,
-            bakiCustomersOwe = moneyNow.bakiCustomersOwe,
-            debtToSuppliers = moneyNow.debtToSuppliers,
+            stockValueAtCost = closingStockValue,
+            bakiCustomersOwe = bakiClosingSum,
+            debtToSuppliers = supplierClosingSum,
             customerStats = customerStatsList,
-            itemsSold = itemsSold
+            itemsSold = itemsSold,
+            grossSales = grossSales,
+            totalDiscounts = totalDiscounts,
+            netSales = netSales,
+            averageOrderValue = averageOrderValue,
+            cashReceivedSales = cashReceivedSales,
+            bakiCreditSales = bakiCreditSales,
+            topProductsByAmount = topProductsByAmount,
+            topCustomersByAmount = topCustomersByAmount,
+            costOfGoodsSold = costOfGoodsSold,
+            grossProfit = grossProfit,
+            totalExpenses = totalExpenses,
+            otherIncome = otherIncomeTotal,
+            netProfit = netProfit,
+            bakiOpeningReceivable = bakiOpeningSum,
+            bakiNewCreditGiven = bakiNewCreditSum,
+            bakiCollectedThisMonth = bakiCollectedSum,
+            bakiClosingReceivable = bakiClosingSum,
+            debtorRows = debtorRows.sortedByDescending { it.amountOwed },
+            bakiAgeing = MonthlyBakiAgeing(
+                bucket0To30 = roundMoney(bucket0To30),
+                bucket31To60 = roundMoney(bucket31To60),
+                bucket60Plus = roundMoney(bucket60Plus)
+            ),
+            bakiHasActivityOrDue = bakiHasActivityOrDue,
+            supplierOpeningPayable = supplierOpeningSum,
+            supplierPurchasesThisMonth = supplierPurchasesTotal,
+            supplierPaidThisMonth = supplierPaidTotal,
+            supplierReturnsThisMonth = supplierReturnsTotal,
+            supplierClosingPayable = supplierClosingSum,
+            supplierOwedRows = supplierOwedRows.sortedByDescending { it.amountOwed },
+            supplierHasActivityOrDue = supplierHasActivityOrDue,
+            openingStockValue = openingStockValue,
+            purchasedStockValue = purchasedStockValue,
+            soldStockAtCost = soldStockAtCost,
+            closingStockValue = closingStockValue,
+            lowStockItems = lowStockItems,
+            slowStock30DayItems = slowStock30DayItems,
+            totalSlowStockMoneyStuck = totalSlowStockMoneyStuck,
+            expensesByCategory = expensesByCategory,
+            accountCashRows = accountCashRows,
+            cashOpeningTotal = cashOpeningTotal,
+            cashInTotal = cashInTotal,
+            cashOutTotal = cashOutTotal,
+            cashClosingBalance = cashClosingTotal,
+            cashCheck = cashCheck,
+            bakiCheck = bakiCheck,
+            supplierCheck = supplierCheck
         )
     }
 

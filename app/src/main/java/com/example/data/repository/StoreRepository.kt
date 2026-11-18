@@ -49,6 +49,8 @@ import com.example.domain.HealthProblem
 import com.example.domain.ShopType
 import com.example.domain.ShopTypeCatalog
 import com.example.util.AppLanguage
+import com.example.util.FirestoreErrorHandler
+import com.example.util.OperationType
 import com.example.util.PhotoStorageMode
 import com.example.util.ProductImageUtil
 import com.example.util.ShopLocale
@@ -68,6 +70,7 @@ import java.util.Date
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.math.max
 import kotlin.math.min
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -833,7 +836,8 @@ class StoreRepository(
             database.collection("users").document(userId).snapshots()
                 .map<DocumentSnapshot, DocumentSnapshot?> { it }
                 .catch { e ->
-                    Log.w("StoreRepository", "User profile snapshot fallback for $userId: ${e.message}")
+                    if (e is CancellationException) throw e
+                    FirestoreErrorHandler.handleFirestoreError(e, OperationType.GET, "users/$userId")
                     emit(null)
                 },
             _localSimpleModes
@@ -872,7 +876,14 @@ class StoreRepository(
                 isSimpleMode = getCachedUserSimpleMode(userId)
             )
         }
-        val snap = database.collection("users").document(userId).get().await()
+        val snap = try {
+            database.collection("users").document(userId).get().await()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            FirestoreErrorHandler.handleFirestoreError(e, OperationType.GET, "users/$userId")
+            throw e
+        }
         if (!snap.exists()) return null
         val rawProfile = snap.toObject(UserProfile::class.java) ?: return null
         val serverHasField = snap.contains("isSimpleMode") || snap.contains("simpleMode")
@@ -895,14 +906,25 @@ class StoreRepository(
         val database = db ?: return
         if (signedInUid == null || uid == "demo_user") return
         val docRef = database.collection("users").document(uid)
-        val payload = mapOf(
-            "email" to profile.email,
-            "storeId" to profile.storeId,
-            "role" to profile.role,
-            "isSimpleMode" to profile.isSimpleMode,
-            "updatedAt" to FieldValue.serverTimestamp()
-        )
-        docRef.set(payload, SetOptions.merge()).await()
+        val existingSnap = runCatching { docRef.get().await() }.getOrNull()
+        val payload = buildMap<String, Any> {
+            put("email", profile.email)
+            put("storeId", profile.storeId)
+            put("role", profile.role)
+            put("isSimpleMode", profile.isSimpleMode)
+            if (existingSnap == null || !existingSnap.exists() || !existingSnap.contains("createdAt")) {
+                put("createdAt", FieldValue.serverTimestamp())
+            }
+            put("updatedAt", FieldValue.serverTimestamp())
+        }
+        try {
+            docRef.set(payload, SetOptions.merge()).await()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            FirestoreErrorHandler.handleFirestoreError(e, OperationType.WRITE, "users/$uid")
+            throw e
+        }
     }
 
     suspend fun updateUserSimpleMode(userId: String, isSimpleMode: Boolean) {
@@ -918,11 +940,18 @@ class StoreRepository(
             "isSimpleMode" to isSimpleMode,
             "updatedAt" to FieldValue.serverTimestamp()
         )
-        val writeTask = docRef.set(payload, SetOptions.merge())
-        if (isDeviceOnline()) {
-            writeTask.await()
-        } else {
-            withTimeoutOrNull(1_200L) { writeTask.await() }
+        try {
+            val writeTask = docRef.set(payload, SetOptions.merge())
+            if (isDeviceOnline()) {
+                writeTask.await()
+            } else {
+                withTimeoutOrNull(1_200L) { writeTask.await() }
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            FirestoreErrorHandler.handleFirestoreError(e, OperationType.WRITE, "users/$targetUid")
+            throw e
         }
     }
 
@@ -938,6 +967,11 @@ class StoreRepository(
             .snapshots()
             .map { snap ->
                 if (snap.exists()) snap.toObject(Store::class.java) else null
+            }
+            .catch { e ->
+                if (e is CancellationException) throw e
+                FirestoreErrorHandler.handleFirestoreError(e, OperationType.GET, "stores/$storeId")
+                emit(null)
             }
     }
 
@@ -1100,16 +1134,25 @@ class StoreRepository(
             "updatedAt" to FieldValue.serverTimestamp()
         )
 
-        storeRef.set(storePayload).await()
-        userRef.set(userPayload, SetOptions.merge()).await()
+        try {
+            storeRef.set(storePayload).await()
+            userRef.set(userPayload, SetOptions.merge()).await()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            FirestoreErrorHandler.handleFirestoreError(e, OperationType.CREATE, "stores/$storeId")
+            throw e
+        }
         try {
             ownerMemberRef.set(ownerMemberPayload).await()
         } catch (e: Exception) {
+            FirestoreErrorHandler.handleFirestoreError(e, OperationType.CREATE, "stores/$storeId/members/$uid")
             Log.w("StoreRepository", "Owner member init note: ${e.message}")
         }
         try {
             counterRef.set(counterPayload, SetOptions.merge()).await()
         } catch (e: Exception) {
+            FirestoreErrorHandler.handleFirestoreError(e, OperationType.CREATE, "stores/$storeId/meta/counters")
             Log.w("StoreRepository", "Counter init note: ${e.message}")
         }
 
@@ -3154,13 +3197,18 @@ class StoreRepository(
     // -------------------------------------------------------------
     fun observeMyMember(storeId: String, uid: String): Flow<StoreMember?> {
         val database = db
-        if (storeId == "demo_store" || database == null) {
+        if (storeId == "demo_store" || database == null || uid.isBlank()) {
             return _demoMembers.map { list -> list.find { it.userId == uid } }
         }
         return database.collection("stores").document(storeId)
             .collection("members").document(uid)
             .snapshots()
             .map { snap -> if (snap.exists()) snap.toObject(StoreMember::class.java) else null }
+            .catch { e ->
+                if (e is CancellationException) throw e
+                FirestoreErrorHandler.handleFirestoreError(e, OperationType.GET, "stores/$storeId/members/$uid")
+                emit(null)
+            }
     }
 
     fun observeMembers(storeId: String): Flow<List<StoreMember>> {
@@ -3174,9 +3222,16 @@ class StoreRepository(
             .map { snap ->
                 val list = snap.toObjects(StoreMember::class.java)
                 if (list.isNotEmpty()) list else {
-                    val storeDoc = database.collection("stores").document(storeId).get().await()
-                    storeDoc.toObject(Store::class.java)?.members ?: emptyList()
+                    val storeDoc = runCatching {
+                        database.collection("stores").document(storeId).get().await()
+                    }.getOrNull()
+                    storeDoc?.toObject(Store::class.java)?.members ?: emptyList()
                 }
+            }
+            .catch { e ->
+                if (e is CancellationException) throw e
+                FirestoreErrorHandler.handleFirestoreError(e, OperationType.LIST, "stores/$storeId/members")
+                emit(emptyList())
             }
     }
 
@@ -3189,6 +3244,11 @@ class StoreRepository(
             .whereEqualTo("storeId", storeId)
             .snapshots()
             .map { it.toObjects(StoreInvite::class.java) }
+            .catch { e ->
+                if (e is CancellationException) throw e
+                FirestoreErrorHandler.handleFirestoreError(e, OperationType.LIST, "invites")
+                emit(emptyList())
+            }
     }
 
     suspend fun createStaffInvite(invite: StoreInvite): String {
@@ -3201,13 +3261,54 @@ class StoreRepository(
         require(InviteCodeConfig.isValidFormat(code)) {
             ShopLocale.format("err_invite_code_format", _currentLanguage.value, InviteCodeConfig.CODE_LENGTH)
         }
-        val inviteWithCode = invite.copy(code = code, id = code)
+        val uid = if (invite.storeId == "demo_store" || database == null) {
+            invite.createdByUid.ifBlank { "demo_user" }
+        } else {
+            requireUserId()
+        }
+        val createdMs = if (invite.createdAt > 0L) invite.createdAt else System.currentTimeMillis()
+        val expiresMs = if (invite.expiresAt > createdMs) invite.expiresAt else createdMs + (24 * 60 * 60 * 1000L)
+        val inviteWithCode = invite.copy(
+            code = code,
+            id = code,
+            createdByUid = uid,
+            status = "active",
+            createdAt = createdMs,
+            expiresAt = expiresMs,
+            usedByUid = "",
+            usedByEmail = "",
+            usedAt = 0L
+        )
         if (invite.storeId == "demo_store" || database == null) {
             _demoInvites.value = _demoInvites.value.filter { it.code != code } + inviteWithCode
             return code
         }
         val inviteRef = database.collection("invites").document(code)
-        inviteRef.set(inviteWithCode).await()
+        val payload = mapOf(
+            "code" to code,
+            "storeId" to inviteWithCode.storeId,
+            "storeName" to inviteWithCode.storeName,
+            "staffName" to inviteWithCode.staffName,
+            "roleLabel" to inviteWithCode.roleLabel,
+            "permissionLevel" to inviteWithCode.permissionLevel,
+            "permissions" to inviteWithCode.permissions,
+            "createdByUid" to uid,
+            "createdByName" to inviteWithCode.createdByName,
+            "status" to "active",
+            "createdAt" to createdMs,
+            "expiresAt" to expiresMs,
+            "usedByUid" to "",
+            "usedByEmail" to "",
+            "usedAt" to 0L
+        )
+        try {
+            inviteRef.set(payload).await()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            FirestoreErrorHandler.handleFirestoreError(e, OperationType.CREATE, "invites/$code")
+            throw e
+        }
         return code
     }
 
@@ -3220,9 +3321,16 @@ class StoreRepository(
             }
             return
         }
-        database.collection("invites").document(cleanCode)
-            .update("status", "cancelled", "updatedAt", FieldValue.serverTimestamp())
-            .await()
+        try {
+            database.collection("invites").document(cleanCode)
+                .update("status", "cancelled", "updatedAt", FieldValue.serverTimestamp())
+                .await()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            FirestoreErrorHandler.handleFirestoreError(e, OperationType.UPDATE, "invites/$cleanCode")
+            throw e
+        }
     }
 
     suspend fun joinStoreWithInvite(

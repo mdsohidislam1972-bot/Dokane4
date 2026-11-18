@@ -30,153 +30,306 @@ object ReportDataBuilders {
         lang: AppLanguage = AppLanguage.EN,
         includeSupplierDebt: Boolean = true
     ): ReportTableData {
+        val isBn = lang == AppLanguage.BN
         val currentMonthLabel = ShopLocale.formatMonthYear(year, month, lang)
+        val noDataLabel = if (isBn) "এই মাসে কোনো তথ্য নেই" else "No data this month"
 
-        val headers = if (canSeeProfit) {
-            listOf(
-                ShopLocale.get("col_product", lang),
-                ShopLocale.get("col_qty_sold", lang),
-                ShopLocale.get("col_total_amount", lang),
-                ShopLocale.get("col_profit", lang)
-            )
+        val headers = if (isBn) {
+            listOf("বিভাগ", "বিবরণ / আইটেম", "বিস্তারিত", "পরিমাণ")
         } else {
-            listOf(
-                ShopLocale.get("col_product", lang),
-                ShopLocale.get("col_qty_sold", lang),
-                ShopLocale.get("col_total_amount", lang)
-            )
+            listOf("Section", "Metric / Item", "Detail", "Amount")
         }
 
-        val rows = reportData.itemsSold.map { stat ->
-            val qtyWithUnit = "${ShopLocale.formatNumber(stat.quantitySold, lang)} ${ShopLocale.displayUnit(stat.unit, lang)}"
-            if (canSeeProfit) {
-                listOf(
-                    stat.productName,
-                    qtyWithUnit,
-                    ShopLocale.formatMoney(stat.totalSalesAmount, lang),
-                    ShopLocale.formatMoney(stat.totalProfit, lang)
-                )
+        val rows = mutableListOf<List<String>>()
+        val rawRows = mutableListOf<List<Double?>>()
+
+        fun addRow(section: String, item: String, detail: String, amountText: String, rawAmount: Double? = null) {
+            rows.add(listOf(section, item, detail, amountText))
+            rawRows.add(listOf(null, null, null, rawAmount))
+        }
+
+        // 1. SUMMARY
+        val sSummary = if (isBn) "১. সারসংক্ষেপ" else "1. Summary"
+        addRow(sSummary, if (isBn) "নিট বিক্রয়" else "Net Sales", ShopLocale.format("total_orders_row", lang, reportData.totalOrders), ShopLocale.formatMoney(reportData.netSales, lang), reportData.netSales)
+        if (canSeeProfit) {
+            addRow(sSummary, if (isBn) "মোট লাভ" else "Gross Profit", "", ShopLocale.formatMoney(reportData.grossProfit, lang), reportData.grossProfit)
+        }
+        addRow(sSummary, if (isBn) "মোট খরচ" else "Total Expenses", "", ShopLocale.formatMoney(reportData.totalExpenses, lang), reportData.totalExpenses)
+        if (canSeeProfit) {
+            addRow(sSummary, if (isBn) "নিট লাভ" else "Net Profit", "", ShopLocale.formatMoney(reportData.netProfit, lang), reportData.netProfit)
+        }
+        addRow(sSummary, if (isBn) "ক্যাশ ও ব্যাংক সমাপনী" else "Cash Closing Balance", "", ShopLocale.formatMoney(reportData.cashClosingBalance, lang), reportData.cashClosingBalance)
+        addRow(sSummary, if (isBn) "মোট বাকি পাওনা" else "Total Baki to Receive", "", ShopLocale.formatMoney(reportData.bakiClosingReceivable, lang), reportData.bakiClosingReceivable)
+        addRow(sSummary, if (isBn) "মহাজন দেনা" else "Total Payable to Suppliers", "", ShopLocale.formatMoney(reportData.supplierClosingPayable, lang), reportData.supplierClosingPayable)
+
+        if (includeSupplierDebt) {
+            // 2. SALES
+            val sSales = if (isBn) "২. বিক্রয়" else "2. Sales"
+            if (reportData.totalOrders == 0L) {
+                addRow(sSales, noDataLabel, "", "")
             } else {
-                listOf(
-                    stat.productName,
-                    qtyWithUnit,
-                    ShopLocale.formatMoney(stat.totalSalesAmount, lang)
-                )
-            }
-        }
-        val rawRows = reportData.itemsSold.map { stat ->
-            if (canSeeProfit) {
-                listOf(null, stat.quantitySold.toDouble(), stat.totalSalesAmount, stat.totalProfit)
-            } else {
-                listOf(null, stat.quantitySold.toDouble(), stat.totalSalesAmount)
-            }
-        }
+                addRow(sSales, if (isBn) "মোট বিক্রয় (ছাড়ের আগে)" else "Gross Sales", "", ShopLocale.formatMoney(reportData.grossSales, lang), reportData.grossSales)
+                addRow(sSales, if (isBn) "ছাড়" else "Discounts", "", ShopLocale.formatMoney(reportData.totalDiscounts, lang), reportData.totalDiscounts)
+                addRow(sSales, if (isBn) "নিট বিক্রয়" else "Net Sales", "", ShopLocale.formatMoney(reportData.netSales, lang), reportData.netSales)
+                addRow(sSales, if (isBn) "অর্ডার সংখ্যা" else "Order Count", "", ShopLocale.formatNumber(reportData.totalOrders, lang), reportData.totalOrders.toDouble())
+                addRow(sSales, if (isBn) "গড় অর্ডার মূল্য" else "Average Order Value", "", ShopLocale.formatMoney(reportData.averageOrderValue, lang), reportData.averageOrderValue)
+                addRow(sSales, if (isBn) "নগদ প্রাপ্ত বিক্রয়" else "Cash Received Sales", "", ShopLocale.formatMoney(reportData.cashReceivedSales, lang), reportData.cashReceivedSales)
+                addRow(sSales, if (isBn) "বাকিতে বিক্রয়" else "Sold on Credit (Baki)", "", ShopLocale.formatMoney(reportData.bakiCreditSales, lang), reportData.bakiCreditSales)
 
-        val totalOrdersText = ShopLocale.format("total_orders_row", lang, reportData.totalOrders)
-        val totalItemsText = ShopLocale.format("items_count_label", lang, reportData.totalItemsSold)
-        val totals = if (canSeeProfit) {
+                reportData.topProductsByAmount.forEachIndexed { idx, prod ->
+                    val rank = ShopLocale.formatNumber(idx + 1, lang)
+                    val qtyDetail = "${ShopLocale.formatNumber(prod.quantitySold, lang)} ${ShopLocale.displayUnit(prod.unit, lang)}"
+                    addRow(
+                        sSales,
+                        if (isBn) "শীর্ষ পণ্য #$rank: ${prod.productName}" else "Top Product #$rank: ${prod.productName}",
+                        qtyDetail,
+                        ShopLocale.formatMoney(prod.totalSalesAmount, lang),
+                        prod.totalSalesAmount
+                    )
+                }
+                reportData.topCustomersByAmount.forEachIndexed { idx, cust ->
+                    val rank = ShopLocale.formatNumber(idx + 1, lang)
+                    val custDisplay = ShopLocale.displayCustomerName(cust.customerName, lang)
+                    val split = if (isBn) {
+                        "নগদ ${ShopLocale.formatMoney(cust.paidAmount, lang)} • বাকি ${ShopLocale.formatMoney(cust.bakiAmount, lang)}"
+                    } else {
+                        "Paid ${ShopLocale.formatMoney(cust.paidAmount, lang)} • Baki ${ShopLocale.formatMoney(cust.bakiAmount, lang)}"
+                    }
+                    addRow(
+                        sSales,
+                        if (isBn) "শীর্ষ ক্রেতা #$rank: $custDisplay" else "Top Customer #$rank: $custDisplay",
+                        split,
+                        ShopLocale.formatMoney(cust.totalBought, lang),
+                        cust.totalBought
+                    )
+                }
+            }
+
+            // 3. BAKI / CREDIT
+            val sBaki = if (isBn) "৩. বাকি / ক্রেডিট" else "3. Baki / Credit"
+            if (!reportData.bakiHasActivityOrDue) {
+                addRow(sBaki, noDataLabel, "", "")
+            } else {
+                addRow(sBaki, if (isBn) "প্রারম্ভিক পাওনা" else "Opening Receivable", "", ShopLocale.formatMoney(reportData.bakiOpeningReceivable, lang), reportData.bakiOpeningReceivable)
+                addRow(sBaki, if (isBn) "নতুন বাকি" else "New Credit Given", "", ShopLocale.formatMoney(reportData.bakiNewCreditGiven, lang), reportData.bakiNewCreditGiven)
+                addRow(sBaki, if (isBn) "এই মাসে আদায়" else "Collected This Month", "", ShopLocale.formatMoney(reportData.bakiCollectedThisMonth, lang), reportData.bakiCollectedThisMonth)
+                addRow(sBaki, if (isBn) "সমাপনী পাওনা" else "Closing Receivable", "", ShopLocale.formatMoney(reportData.bakiClosingReceivable, lang), reportData.bakiClosingReceivable)
+                addRow(sBaki, if (isBn) "বকেয়া বয়স: ০-৩০ দিন" else "Ageing: 0-30 Days", "", ShopLocale.formatMoney(reportData.bakiAgeing.bucket0To30, lang), reportData.bakiAgeing.bucket0To30)
+                addRow(sBaki, if (isBn) "বকেয়া বয়স: ৩১-৬০ দিন" else "Ageing: 31-60 Days", "", ShopLocale.formatMoney(reportData.bakiAgeing.bucket31To60, lang), reportData.bakiAgeing.bucket31To60)
+                addRow(sBaki, if (isBn) "বকেয়া বয়স: ৬০+ দিন" else "Ageing: 60+ Days", "", ShopLocale.formatMoney(reportData.bakiAgeing.bucket60Plus, lang), reportData.bakiAgeing.bucket60Plus)
+
+                reportData.debtorRows.forEach { d ->
+                    val overdueStr = if (isBn) "${ShopLocale.formatNumber(d.daysOverdue, lang)} দিন বকেয়া" else "${ShopLocale.formatNumber(d.daysOverdue, lang)} days overdue"
+                    addRow(sBaki, d.customerName, overdueStr, ShopLocale.formatMoney(d.amountOwed, lang), d.amountOwed)
+                }
+            }
+
+            // 4. SUPPLIERS
+            val sSup = if (isBn) "৪. মহাজন / সাপ্লায়ার" else "4. Suppliers"
+            if (!reportData.supplierHasActivityOrDue) {
+                addRow(sSup, noDataLabel, "", "")
+            } else {
+                addRow(sSup, if (isBn) "প্রারম্ভিক দেনা" else "Opening Payable", "", ShopLocale.formatMoney(reportData.supplierOpeningPayable, lang), reportData.supplierOpeningPayable)
+                addRow(sSup, if (isBn) "এই মাসের ক্রয়" else "Purchases This Month", "", ShopLocale.formatMoney(reportData.supplierPurchasesThisMonth, lang), reportData.supplierPurchasesThisMonth)
+                addRow(sSup, if (isBn) "এই মাসে পরিশোধ" else "Paid This Month", "", ShopLocale.formatMoney(reportData.supplierPaidThisMonth, lang), reportData.supplierPaidThisMonth)
+                if (reportData.supplierReturnsThisMonth > 0.001) {
+                    addRow(sSup, if (isBn) "ক্রয় ফেরত" else "Purchase Returns", "", ShopLocale.formatMoney(reportData.supplierReturnsThisMonth, lang), reportData.supplierReturnsThisMonth)
+                }
+                addRow(sSup, if (isBn) "সমাপনী দেনা" else "Closing Payable", "", ShopLocale.formatMoney(reportData.supplierClosingPayable, lang), reportData.supplierClosingPayable)
+
+                reportData.supplierOwedRows.forEach { sup ->
+                    addRow(sSup, sup.supplierName, sup.supplierPhone, ShopLocale.formatMoney(sup.amountOwed, lang), sup.amountOwed)
+                }
+            }
+
+            // 5. STOCK
+            val sStock = if (isBn) "৫. স্টক" else "5. Stock"
+            if (reportData.openingStockValue <= 0.001 && reportData.purchasedStockValue <= 0.001 && reportData.soldStockAtCost <= 0.001 && reportData.closingStockValue <= 0.001 && reportData.lowStockItems.isEmpty() && reportData.slowStock30DayItems.isEmpty()) {
+                addRow(sStock, noDataLabel, "", "")
+            } else {
+                if (canSeeProfit) {
+                    addRow(sStock, if (isBn) "প্রারম্ভিক স্টক মূল্য" else "Opening Stock (at Cost)", "", ShopLocale.formatMoney(reportData.openingStockValue, lang), reportData.openingStockValue)
+                    addRow(sStock, if (isBn) "ক্রয়" else "Purchased", "", ShopLocale.formatMoney(reportData.purchasedStockValue, lang), reportData.purchasedStockValue)
+                    addRow(sStock, if (isBn) "বিক্রিত পণ্যের ক্রয়মূল্য" else "Sold (at Cost)", "", ShopLocale.formatMoney(reportData.soldStockAtCost, lang), reportData.soldStockAtCost)
+                    addRow(sStock, if (isBn) "সমাপনী স্টক মূল্য" else "Closing Stock (at Cost)", "", ShopLocale.formatMoney(reportData.closingStockValue, lang), reportData.closingStockValue)
+                }
+                reportData.lowStockItems.forEach { item ->
+                    val qtyTxt = "${ShopLocale.formatNumber(item.stock, lang)} / ${ShopLocale.formatNumber(item.lowStockLimit, lang)} ${ShopLocale.displayUnit(item.unit, lang)}"
+                    addRow(
+                        sStock,
+                        if (isBn) "কম স্টক: ${item.productName}" else "Low Stock: ${item.productName}",
+                        qtyTxt,
+                        if (canSeeProfit) ShopLocale.formatMoney(item.stockValueAtCost, lang) else qtyTxt,
+                        if (canSeeProfit) item.stockValueAtCost else item.stock
+                    )
+                }
+                reportData.slowStock30DayItems.forEach { item ->
+                    val qtyTxt = "${ShopLocale.formatNumber(item.stock, lang)} ${ShopLocale.displayUnit(item.unit, lang)}"
+                    addRow(
+                        sStock,
+                        if (isBn) "৩০ দিনে বিক্রি হয়নি: ${item.productName}" else "No Sale 30d: ${item.productName}",
+                        qtyTxt,
+                        if (canSeeProfit) ShopLocale.formatMoney(item.moneyStuck, lang) else qtyTxt,
+                        if (canSeeProfit) item.moneyStuck else item.stock
+                    )
+                }
+            }
+
+            // 6. EXPENSES
+            val sExp = if (isBn) "৬. খরচ" else "6. Expenses"
+            if (reportData.expensesByCategory.isEmpty()) {
+                addRow(sExp, noDataLabel, "", "")
+            } else {
+                reportData.expensesByCategory.forEach { exp ->
+                    val pctTxt = ShopLocale.formatPercent(exp.percentage, 1, lang)
+                    addRow(sExp, ShopLocale.displayCategory(exp.category, lang), pctTxt, ShopLocale.formatMoney(exp.amount, lang), exp.amount)
+                }
+                addRow(sExp, if (isBn) "মোট খরচ" else "Total Expenses", "", ShopLocale.formatMoney(reportData.totalExpenses, lang), reportData.totalExpenses)
+            }
+
+            // 7. CASH & BANK
+            val sCash = if (isBn) "৭. ক্যাশ ও ব্যাংক" else "7. Cash & Bank"
+            if (reportData.accountCashRows.isEmpty()) {
+                addRow(sCash, noDataLabel, "", "")
+            } else {
+                reportData.accountCashRows.forEach { acc ->
+                    val dispName = ShopLocale.displayAccountName(acc.accountName, acc.accountId, lang)
+                    val flowDetail = if (isBn) {
+                        "শুরু ${ShopLocale.formatMoney(acc.opening, lang)} | জমা +${ShopLocale.formatMoney(acc.moneyIn, lang)} | খরচ -${ShopLocale.formatMoney(acc.moneyOut, lang)}"
+                    } else {
+                        "Open ${ShopLocale.formatMoney(acc.opening, lang)} | In +${ShopLocale.formatMoney(acc.moneyIn, lang)} | Out -${ShopLocale.formatMoney(acc.moneyOut, lang)}"
+                    }
+                    addRow(sCash, dispName, flowDetail, ShopLocale.formatMoney(acc.closing, lang), acc.closing)
+                }
+                val totDetail = if (isBn) {
+                    "শুরু ${ShopLocale.formatMoney(reportData.cashOpeningTotal, lang)} | জমা +${ShopLocale.formatMoney(reportData.cashInTotal, lang)} | খরচ -${ShopLocale.formatMoney(reportData.cashOutTotal, lang)}"
+                } else {
+                    "Open ${ShopLocale.formatMoney(reportData.cashOpeningTotal, lang)} | In +${ShopLocale.formatMoney(reportData.cashInTotal, lang)} | Out -${ShopLocale.formatMoney(reportData.cashOutTotal, lang)}"
+                }
+                addRow(sCash, if (isBn) "মোট সমাপনী স্থিতি" else "Total Cash Closing", totDetail, ShopLocale.formatMoney(reportData.cashClosingBalance, lang), reportData.cashClosingBalance)
+            }
+
+            // 8. PROFIT & LOSS
+            val sPnl = if (isBn) "৮. লাভ ও ক্ষতি" else "8. Profit & Loss"
+            if (!canSeeProfit || (reportData.netSales == 0.0 && reportData.costOfGoodsSold == 0.0 && reportData.totalExpenses == 0.0 && reportData.otherIncome == 0.0)) {
+                addRow(sPnl, noDataLabel, "", "")
+            } else {
+                addRow(sPnl, if (isBn) "নিট বিক্রয়" else "Net Sales", "", ShopLocale.formatMoney(reportData.netSales, lang), reportData.netSales)
+                addRow(sPnl, if (isBn) "(-) বিক্রিত পণ্যের ক্রয়মূল্য" else "(-) Cost of Goods Sold", "", ShopLocale.formatMoney(reportData.costOfGoodsSold, lang), reportData.costOfGoodsSold)
+                addRow(sPnl, if (isBn) "(=) মোট লাভ" else "(=) Gross Profit", "", ShopLocale.formatMoney(reportData.grossProfit, lang), reportData.grossProfit)
+                if (reportData.otherIncome > 0.001) {
+                    addRow(sPnl, if (isBn) "(+) অন্যান্য আয়" else "(+) Other Income", "", ShopLocale.formatMoney(reportData.otherIncome, lang), reportData.otherIncome)
+                }
+                addRow(sPnl, if (isBn) "(-) মোট খরচ" else "(-) Expenses", "", ShopLocale.formatMoney(reportData.totalExpenses, lang), reportData.totalExpenses)
+                addRow(sPnl, if (isBn) "(=) নিট লাভ" else "(=) Net Profit", "", ShopLocale.formatMoney(reportData.netProfit, lang), reportData.netProfit)
+            }
+
+            // RECONCILIATION CHECK
+            val sCheck = if (isBn) "হিসাব যাচাই" else "Reconciliation"
             listOf(
-                totalOrdersText,
-                totalItemsText,
-                ShopLocale.formatMoney(reportData.totalSales, lang),
-                ShopLocale.formatMoney(reportData.totalProfit, lang)
-            )
-        } else {
-            listOf(
-                totalOrdersText,
-                totalItemsText,
-                ShopLocale.formatMoney(reportData.totalSales, lang)
-            )
-        }
-        val rawTotals = if (canSeeProfit) {
-            listOf(null, reportData.totalItemsSold.toDouble(), reportData.totalSales, reportData.totalProfit)
-        } else {
-            listOf(null, reportData.totalItemsSold.toDouble(), reportData.totalSales)
+                reportData.cashCheck to (if (isBn) "ক্যাশ ও ব্যাংক" else "Cash & Bank"),
+                reportData.bakiCheck to (if (isBn) "বাকি / ক্রেডিট" else "Baki / Credit"),
+                reportData.supplierCheck to (if (isBn) "মহাজন / সাপ্লায়ার" else "Suppliers")
+            ).forEach { (chk, name) ->
+                val statusTxt = if (chk.matches) {
+                    if (isBn) "সঠিক (সমাপনী = শুরু + জমা - খরচ)" else "Matched (Closing = Opening + In - Out)"
+                } else {
+                    if (isBn) {
+                        "সতর্কতা: অমিল ${ShopLocale.formatMoney(chk.difference, lang)} (প্রত্যাশিত ${ShopLocale.formatMoney(chk.expectedClosing, lang)})"
+                    } else {
+                        "Warning: Diff ${ShopLocale.formatMoney(chk.difference, lang)} (Expected ${ShopLocale.formatMoney(chk.expectedClosing, lang)})"
+                    }
+                }
+                addRow(sCheck, name, statusTxt, ShopLocale.formatMoney(chk.actualClosing, lang), chk.actualClosing)
+            }
         }
 
         val title = ShopLocale.format("rep_monthly_title", lang, currentMonthLabel)
-        val notes = when {
-            !includeSupplierDebt && canSeeProfit -> {
-                if (lang == AppLanguage.BN) {
-                    "মজুদ পণ্যের মূল্য: ${ShopLocale.formatMoney(reportData.stockValueAtCost, lang)} | পাওনা বাকি: ${ShopLocale.formatMoney(reportData.bakiCustomersOwe, lang)}"
-                } else {
-                    "Stock Value: ${ShopLocale.formatMoney(reportData.stockValueAtCost, lang)} | Total Baki: ${ShopLocale.formatMoney(reportData.bakiCustomersOwe, lang)}"
-                }
-            }
-            !includeSupplierDebt -> {
-                if (lang == AppLanguage.BN) {
-                    "পাওনা বাকি: ${ShopLocale.formatMoney(reportData.bakiCustomersOwe, lang)}"
-                } else {
-                    "Total Baki: ${ShopLocale.formatMoney(reportData.bakiCustomersOwe, lang)}"
-                }
-            }
-            canSeeProfit -> ShopLocale.format(
-                "monthly_notes_profit",
-                lang,
-                ShopLocale.formatMoney(reportData.stockValueAtCost, lang),
-                ShopLocale.formatMoney(reportData.bakiCustomersOwe, lang),
-                ShopLocale.formatMoney(reportData.debtToSuppliers, lang)
-            )
-            else -> ShopLocale.format(
-                "monthly_notes_no_profit",
-                lang,
-                ShopLocale.formatMoney(reportData.bakiCustomersOwe, lang),
-                ShopLocale.formatMoney(reportData.debtToSuppliers, lang)
-            )
-        }
 
         val summaryMetrics = buildList {
             add(
                 ReportSummaryMetric(
-                    label = if (lang == AppLanguage.BN) "মোট বিক্রয়" else "Total Sales",
-                    value = ShopLocale.formatMoney(reportData.totalSales, lang),
+                    label = if (isBn) "নিট বিক্রয়" else "Net Sales",
+                    value = ShopLocale.formatMoney(reportData.netSales, lang),
                     detail = ShopLocale.format("total_orders_row", lang, reportData.totalOrders)
                 )
             )
             if (canSeeProfit) {
-                val marginPct = if (reportData.totalSales > 0.0) {
-                    (reportData.totalProfit / reportData.totalSales) * 100.0
-                } else 0.0
                 add(
                     ReportSummaryMetric(
-                        label = if (lang == AppLanguage.BN) "মোট লাভ" else "Total Profit",
-                        value = ShopLocale.formatMoney(reportData.totalProfit, lang),
-                        detail = if (lang == AppLanguage.BN) {
-                            "লাভের হার: ${ShopLocale.formatNumber(marginPct.toInt(), lang)}%"
-                        } else {
-                            "Margin: ${String.format(java.util.Locale.US, "%.1f%%", marginPct)}"
-                        }
-                    )
-                )
-                add(
-                    ReportSummaryMetric(
-                        label = if (lang == AppLanguage.BN) "মজুদ পণ্যের মূল্য" else "Stock Value (Cost)",
-                        value = ShopLocale.formatMoney(reportData.stockValueAtCost, lang)
+                        label = if (isBn) "মোট লাভ" else "Gross Profit",
+                        value = ShopLocale.formatMoney(reportData.grossProfit, lang)
                     )
                 )
             }
             add(
                 ReportSummaryMetric(
-                    label = if (lang == AppLanguage.BN) "ক্রেতাদের বাকি" else "Customer Baki",
-                    value = ShopLocale.formatMoney(reportData.bakiCustomersOwe, lang)
+                    label = if (isBn) "মোট খরচ" else "Total Expenses",
+                    value = ShopLocale.formatMoney(reportData.totalExpenses, lang)
+                )
+            )
+            if (canSeeProfit) {
+                add(
+                    ReportSummaryMetric(
+                        label = if (isBn) "নিট লাভ" else "Net Profit",
+                        value = ShopLocale.formatMoney(reportData.netProfit, lang)
+                    )
+                )
+            }
+            add(
+                ReportSummaryMetric(
+                    label = if (isBn) "ক্যাশ সমাপনী" else "Cash Closing",
+                    value = ShopLocale.formatMoney(reportData.cashClosingBalance, lang)
+                )
+            )
+            add(
+                ReportSummaryMetric(
+                    label = if (isBn) "মোট বাকি পাওনা" else "Baki to Receive",
+                    value = ShopLocale.formatMoney(reportData.bakiClosingReceivable, lang)
+                )
+            )
+            add(
+                ReportSummaryMetric(
+                    label = if (isBn) "মহাজন দেনা" else "Supplier Payable",
+                    value = ShopLocale.formatMoney(reportData.supplierClosingPayable, lang)
                 )
             )
         }
 
+        val checksNote = if (!includeSupplierDebt) {
+            if (isBn) {
+                "সারাংশ: নিট বিক্রয় ${ShopLocale.formatMoney(reportData.netSales, lang)} | ক্যাশ ${ShopLocale.formatMoney(reportData.cashClosingBalance, lang)} | পাওনা ${ShopLocale.formatMoney(reportData.bakiClosingReceivable, lang)}"
+            } else {
+                "Summary: Net Sales ${ShopLocale.formatMoney(reportData.netSales, lang)} | Cash ${ShopLocale.formatMoney(reportData.cashClosingBalance, lang)} | Baki ${ShopLocale.formatMoney(reportData.bakiClosingReceivable, lang)}"
+            }
+        } else {
+            val allOk = reportData.cashCheck.matches && reportData.bakiCheck.matches && reportData.supplierCheck.matches
+            if (allOk) {
+                if (isBn) "সমাপনী = প্রারম্ভিক + জমা - খরচ যাচাই: ক্যাশ, বাকি ও মহাজন হিসাব সম্পূর্ণ সঠিক।" else "Check (Closing = Opening + In - Out): Cash, Baki & Suppliers all match."
+            } else {
+                val mismatches = buildList {
+                    if (!reportData.cashCheck.matches) add(if (isBn) "ক্যাশ (${ShopLocale.formatMoney(reportData.cashCheck.difference, lang)})" else "Cash (${ShopLocale.formatMoney(reportData.cashCheck.difference, lang)})")
+                    if (!reportData.bakiCheck.matches) add(if (isBn) "বাকি (${ShopLocale.formatMoney(reportData.bakiCheck.difference, lang)})" else "Baki (${ShopLocale.formatMoney(reportData.bakiCheck.difference, lang)})")
+                    if (!reportData.supplierCheck.matches) add(if (isBn) "মহাজন (${ShopLocale.formatMoney(reportData.supplierCheck.difference, lang)})" else "Suppliers (${ShopLocale.formatMoney(reportData.supplierCheck.difference, lang)})")
+                }.joinToString(", ")
+                if (isBn) "সতর্কতা — হিসাব অমিল: $mismatches" else "Check warning — mismatch in: $mismatches"
+            }
+        }
+
         return ReportTableData(
             title = title,
-            storeName = store?.name ?: ShopLocale.get("receipt_header_store_default", lang),
+            storeName = store?.name?.ifBlank { ShopLocale.get("receipt_header_store_default", lang) } ?: ShopLocale.get("receipt_header_store_default", lang),
             storePhone = store?.phone ?: "",
             storeAddress = store?.address ?: "",
             periodLabel = currentMonthLabel,
             generatedAt = nowFormatted(lang),
             headers = headers,
             rows = rows,
-            numericColumns = if (canSeeProfit) setOf(1, 2, 3) else setOf(1, 2),
+            numericColumns = setOf(3),
             rawNumbers = rawRows,
-            totals = totals,
-            rawTotals = rawTotals,
-            notes = notes,
+            totals = null,
+            rawTotals = emptyList(),
+            notes = checksNote,
             summaryMetrics = summaryMetrics
         )
     }

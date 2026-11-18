@@ -1,0 +1,115 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Signed-in user account profile linking Firebase Auth UID to a store and UI mode.",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string" },
+        "storeId": { "type": "string" },
+        "role": { "type": "string" },
+        "isSimpleMode": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      }
+    },
+    "StoreInvite": {
+      "title": "StoreInvite",
+      "description": "One-time staff invite code created by a store owner and redeemed once by a joining user.",
+      "type": "object",
+      "properties": {
+        "code": { "type": "string" },
+        "storeId": { "type": "string" },
+        "storeName": { "type": "string" },
+        "staffName": { "type": "string" },
+        "roleLabel": { "type": "string" },
+        "permissionLevel": { "type": "string" },
+        "permissions": { "type": "object" },
+        "createdByUid": { "type": "string" },
+        "createdByName": { "type": "string" },
+        "status": { "type": "string", "enum": ["active", "used", "cancelled"] },
+        "createdAt": { "type": "integer" },
+        "expiresAt": { "type": "integer" },
+        "usedByUid": { "type": "string" },
+        "usedByEmail": { "type": "string" },
+        "usedAt": { "type": "integer" }
+      },
+      "required": ["code", "storeId", "staffName", "createdByUid", "status", "createdAt", "expiresAt"]
+    },
+    "Store": {
+      "title": "Store",
+      "description": "Tenant shop document containing ownerId, memberUids, and store metadata.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "phone": { "type": "string" },
+        "address": { "type": "string" },
+        "shopType": { "type": "string" },
+        "productCategories": { "type": "array", "items": { "type": "string" } },
+        "ownerId": { "type": "string" },
+        "memberUids": { "type": "array", "items": { "type": "string" } },
+        "members": { "type": "array" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "ownerId", "memberUids"]
+    },
+    "StoreMember": {
+      "title": "StoreMember",
+      "description": "Staff or owner membership record inside a store.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "displayName": { "type": "string" },
+        "email": { "type": "string" },
+        "role": { "type": "string" },
+        "roleLabel": { "type": "string" },
+        "permissionLevel": { "type": "string" },
+        "permissions": { "type": "object" },
+        "status": { "type": "string" },
+        "joinedTime": { "type": "integer" },
+        "invitedBy": { "type": "string" },
+        "inviteCode": { "type": "string" }
+      },
+      "required": ["userId", "role", "status"]
+    },
+    "PrivateAiKeyDoc": {
+      "title": "PrivateAiKeyDoc",
+      "description": "Owner-only Gemini API key document stored under stores/{storeId}/private/aiKey.",
+      "type": "object",
+      "properties": {
+        "storeId": { "type": "string" },
+        "apiKey": { "type": "string" },
+        "keyLast4": { "type": "string" },
+        "updatedBy": { "type": "string" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["storeId", "apiKey", "keyLast4", "updatedBy"]
+    }
+  },
+  "auth": {
+    "providers": ["google.com", "password"]
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "UserProfile",
+      "description": "Per-user profile accessible only to its authenticated owner."
+    },
+    "/invites/{code}": {
+      "schema": "StoreInvite",
+      "description": "Staff invite codes; owners create/list/cancel for their store and joining users redeem by exact code."
+    },
+    "/stores/{storeId}": {
+      "schema": "Store",
+      "description": "Store root documents scoped to ownerId and memberUids."
+    },
+    "/stores/{storeId}/members/{memberId}": {
+      "schema": "StoreMember",
+      "description": "Store member records and granular permissions."
+    },
+    "/stores/{storeId}/private/{docId}": {
+      "schema": "PrivateAiKeyDoc",
+      "description": "Owner-only private store settings such as private/aiKey."
+    }
+  }
+}

@@ -1,0 +1,327 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // =============================================================
+    // CORE AUTH & MEMBERSHIP HELPERS
+    // =============================================================
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isSelf(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function storePath(storeId) {
+      return /databases/$(database)/documents/stores/$(storeId);
+    }
+
+    function getStoreData(storeId) {
+      return get(storePath(storeId)).data;
+    }
+
+    function isStoreOwner(storeId) {
+      return isSignedIn()
+        && storeId is string
+        && storeId.size() > 0
+        && exists(storePath(storeId))
+        && getStoreData(storeId).ownerId == request.auth.uid;
+    }
+
+    function isStoreMember(storeId) {
+      return isSignedIn()
+        && storeId is string
+        && storeId.size() > 0
+        && exists(storePath(storeId))
+        && (
+          getStoreData(storeId).ownerId == request.auth.uid
+          || (getStoreData(storeId).memberUids is list && request.auth.uid in getStoreData(storeId).memberUids)
+        );
+    }
+
+    function isStoreMemberAfter(storeId) {
+      return isSignedIn()
+        && storeId is string
+        && storeId.size() > 0
+        && existsAfter(storePath(storeId))
+        && (
+          getAfter(storePath(storeId)).data.ownerId == request.auth.uid
+          || (
+            getAfter(storePath(storeId)).data.memberUids is list
+            && request.auth.uid in getAfter(storePath(storeId)).data.memberUids
+          )
+        );
+    }
+
+    function isValidUserProfileFields(data) {
+      return data.keys().hasOnly([
+          'email',
+          'storeId',
+          'role',
+          'isSimpleMode',
+          'createdAt',
+          'updatedAt'
+        ])
+        && (!('email' in data) || (data.email is string && data.email.size() <= 200))
+        && (!('storeId' in data) || (data.storeId is string && data.storeId.size() <= 128))
+        && (!('role' in data) || (data.role is string && data.role.size() <= 40))
+        && (!('isSimpleMode' in data) || data.isSimpleMode is bool)
+        && (!('createdAt' in data) || data.createdAt is timestamp)
+        && (!('updatedAt' in data) || data.updatedAt is timestamp)
+        && (!('storeId' in data) || data.storeId == '' || isStoreMember(data.storeId) || isStoreMemberAfter(data.storeId));
+    }
+
+    function isValidStoreCreate(data) {
+      return data.keys().hasOnly([
+          'name',
+          'phone',
+          'address',
+          'shopType',
+          'productCategories',
+          'ownerId',
+          'memberUids',
+          'members',
+          'createdAt',
+          'updatedAt'
+        ])
+        && data.name is string && data.name.size() > 0 && data.name.size() <= 120
+        && (!('phone' in data) || (data.phone is string && data.phone.size() <= 40))
+        && (!('address' in data) || (data.address is string && data.address.size() <= 300))
+        && (!('shopType' in data) || (data.shopType is string && data.shopType.size() <= 40))
+        && (!('productCategories' in data) || (data.productCategories is list && data.productCategories.size() <= 50))
+        && data.ownerId == request.auth.uid
+        && data.memberUids is list
+        && data.memberUids.size() == 1
+        && request.auth.uid in data.memberUids
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidInviteJoinOnStore(storeId) {
+      let memberAfterPath = /databases/$(database)/documents/stores/$(storeId)/members/$(request.auth.uid);
+      return isSignedIn()
+        && !(request.auth.uid in resource.data.memberUids)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['memberUids', 'updatedAt'])
+        && request.resource.data.memberUids is list
+        && request.resource.data.memberUids.hasAll(resource.data.memberUids)
+        && request.resource.data.memberUids.size() == resource.data.memberUids.size() + 1
+        && request.auth.uid in request.resource.data.memberUids
+        && request.resource.data.updatedAt is timestamp
+        && existsAfter(memberAfterPath)
+        && getAfter(memberAfterPath).data.userId == request.auth.uid
+        && getAfter(memberAfterPath).data.role != 'owner'
+        && getAfter(memberAfterPath).data.inviteCode is string
+        && getAfter(memberAfterPath).data.inviteCode.size() > 0
+        && isRedeemingInviteForStore(getAfter(memberAfterPath).data.inviteCode, storeId);
+    }
+
+    function isRedeemingInviteForStore(code, storeId) {
+      let invPath = /databases/$(database)/documents/invites/$(code);
+      return exists(invPath)
+        && get(invPath).data.storeId == storeId
+        && get(invPath).data.status == 'active'
+        && get(invPath).data.createdByUid != request.auth.uid
+        && get(invPath).data.expiresAt is int
+        && get(invPath).data.expiresAt >= request.time.toMillis()
+        && existsAfter(invPath)
+        && getAfter(invPath).data.status == 'used'
+        && getAfter(invPath).data.usedByUid == request.auth.uid;
+    }
+
+    function isValidInviteCreate(code, data) {
+      return isSignedIn()
+        && data.keys().hasOnly([
+          'code',
+          'storeId',
+          'storeName',
+          'staffName',
+          'roleLabel',
+          'permissionLevel',
+          'permissions',
+          'createdByUid',
+          'createdByName',
+          'status',
+          'createdAt',
+          'expiresAt',
+          'usedByUid',
+          'usedByEmail',
+          'usedAt'
+        ])
+        && data.code == code
+        && code.size() >= 6 && code.size() <= 16
+        && data.storeId is string
+        && isStoreOwner(data.storeId)
+        && data.createdByUid == request.auth.uid
+        && data.staffName is string && data.staffName.size() > 0 && data.staffName.size() <= 100
+        && data.roleLabel is string && data.roleLabel.size() > 0 && data.roleLabel.size() <= 40
+        && data.permissionLevel is string && data.permissionLevel.size() > 0 && data.permissionLevel.size() <= 40
+        && data.permissions is map
+        && data.status == 'active'
+        && data.createdAt is int
+        && data.expiresAt is int && data.expiresAt > data.createdAt
+        && data.usedByUid == ''
+        && data.usedByEmail == ''
+        && data.usedAt == 0;
+    }
+
+    // =============================================================
+    // USER PROFILES
+    // =============================================================
+
+    match /users/{userId} {
+      allow get: if isSelf(userId);
+      allow list: if false;
+      allow create, update: if isSelf(userId) && isValidUserProfileFields(request.resource.data);
+      allow delete: if false;
+    }
+
+    // =============================================================
+    // STAFF INVITE CODES
+    // =============================================================
+
+    match /invites/{code} {
+      // Exact code lookup (get) allowed for signed-in users so staff can inspect/redeem an invite code.
+      // Listing/querying invites is restricted to the store owner or creator.
+      allow get: if isSignedIn();
+      allow list: if isSignedIn() && (
+        resource.data.createdByUid == request.auth.uid
+        || isStoreOwner(resource.data.storeId)
+      );
+
+      allow create: if isValidInviteCreate(code, request.resource.data);
+
+      allow update: if (
+        // Store owner cancelling an active invite
+        isStoreOwner(resource.data.storeId)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'updatedAt'])
+        && request.resource.data.status == 'cancelled'
+      ) || (
+        // Staff member redeeming an active invite inside the join transaction
+        isSignedIn()
+        && resource.data.status == 'active'
+        && resource.data.createdByUid != request.auth.uid
+        && resource.data.expiresAt is int
+        && resource.data.expiresAt >= request.time.toMillis()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'status',
+          'usedByUid',
+          'usedByEmail',
+          'usedAt',
+          'updatedAt'
+        ])
+        && request.resource.data.status == 'used'
+        && request.resource.data.usedByUid == request.auth.uid
+        && request.resource.data.usedByEmail is string
+        && request.resource.data.usedAt is int
+        && request.resource.data.updatedAt is timestamp
+        && isStoreMemberAfter(resource.data.storeId)
+      );
+
+      allow delete: if false;
+    }
+
+    // =============================================================
+    // STORES & SUBCOLLECTIONS
+    // =============================================================
+
+    match /stores/{storeId} {
+      allow get: if isStoreMember(storeId);
+      allow list: if isSignedIn() && (
+        resource.data.ownerId == request.auth.uid
+        || (resource.data.memberUids is list && request.auth.uid in resource.data.memberUids)
+      );
+
+      allow create: if isSignedIn() && isValidStoreCreate(request.resource.data);
+
+      allow update: if (
+        isStoreOwner(storeId)
+        && request.resource.data.ownerId == resource.data.ownerId
+      ) || isValidInviteJoinOnStore(storeId);
+
+      allow delete: if false;
+
+      // Owner-only private secrets (e.g. Gemini API key)
+      match /private/{docId} {
+        allow read, write: if isStoreOwner(storeId);
+      }
+
+      // Store staff & owner member records
+      match /members/{memberId} {
+        allow get: if isStoreMember(storeId) || isSelf(memberId);
+        allow list: if isStoreMember(storeId);
+
+        allow create: if isStoreOwner(storeId) || (
+          isSelf(memberId)
+          && request.resource.data.userId == request.auth.uid
+          && request.resource.data.role != 'owner'
+          && request.resource.data.status == 'Active'
+          && request.resource.data.inviteCode is string
+          && request.resource.data.inviteCode.size() > 0
+          && isRedeemingInviteForStore(request.resource.data.inviteCode, storeId)
+          && isStoreMemberAfter(storeId)
+        );
+
+        allow update: if isStoreOwner(storeId)
+          && (memberId != resource.data.userId || request.resource.data.userId == resource.data.userId);
+
+        allow delete: if false;
+      }
+
+      // Operational subcollections scoped strictly to active store members
+      match /{subcollection}/{docId} {
+        allow read: if subcollection != 'private'
+          && subcollection != 'members'
+          && isStoreMember(storeId);
+
+        allow create, update: if subcollection in [
+            'products',
+            'productBin',
+            'customers',
+            'suppliers',
+            'sales',
+            'purchases',
+            'purchaseReturns',
+            'payments',
+            'supplierPayments',
+            'accounts',
+            'accountAdjustments',
+            'expenses',
+            'otherIncomes',
+            'categories',
+            'notes',
+            'healthFixLogs',
+            'meta',
+            'strategy'
+          ]
+          && isStoreMember(storeId)
+          && (!('storeId' in request.resource.data) || request.resource.data.storeId == storeId);
+
+        allow delete: if subcollection in [
+            'products',
+            'productBin',
+            'customers',
+            'suppliers',
+            'sales',
+            'purchases',
+            'purchaseReturns',
+            'payments',
+            'supplierPayments',
+            'accounts',
+            'accountAdjustments',
+            'expenses',
+            'otherIncomes',
+            'categories',
+            'notes'
+          ]
+          && isStoreMember(storeId);
+      }
+    }
+
+    // Default deny for everything else
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
